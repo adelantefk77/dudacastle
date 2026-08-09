@@ -4,7 +4,7 @@
   justify-content: center;
   background:
     linear-gradient(rgba(13, 10, 7, 0.5), rgba(13, 10, 7, 0.78)),
-    url("/cards/landing-background.png") center / cover no-repeat;
+    url("/cards/landing-background.webp") center / cover no-repeat;
   color: #f4e9d8;
   font-family: "Georgia", serif;
 }

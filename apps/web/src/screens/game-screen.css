@@ -2,7 +2,7 @@
   min-height: 100vh;
   background:
     linear-gradient(rgba(17, 13, 9, 0.42), rgba(17, 13, 9, 0.58)),
-    url("/cards/board-background.png") center top / cover no-repeat;
+    url("/cards/board-background.webp") center top / cover no-repeat;
   color: #f4e9d8;
   font-family: "Georgia", serif;
   padding: 16px 24px 60px;
