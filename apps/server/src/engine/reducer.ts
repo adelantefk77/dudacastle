@@ -537,9 +537,12 @@ function checkEliminationsAndWinner(state: GameState, emit: (type: string, paylo
   }
 
   const remaining = state.players.filter((p) => !p.eliminated);
-  if (state.status === "in_progress" && remaining.length === 1) {
+  // remaining.length === 0 jest możliwe, gdy efekt globalny (np. Długie Zaćmienie Słońca) zabija
+  // WSZYSTKICH pozostałych graczy jednocześnie — bez tej gałęzi mecz zostawałby na zawsze
+  // "in_progress" bez zwycięzcy, bo warunek === 1 nigdy by się nie spełnił.
+  if (state.status === "in_progress" && remaining.length <= 1) {
     state.status = "finished";
-    state.winnerMatchPlayerId = remaining[0].matchPlayerId;
-    emit("GAME_FINISHED", { winnerMatchPlayerId: remaining[0].matchPlayerId });
+    state.winnerMatchPlayerId = remaining[0]?.matchPlayerId ?? null;
+    emit("GAME_FINISHED", { winnerMatchPlayerId: state.winnerMatchPlayerId });
   }
 }

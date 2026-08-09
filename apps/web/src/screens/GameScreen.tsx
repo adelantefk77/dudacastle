@@ -205,7 +205,9 @@ function GameBoard({
   }
 
   function attackKingdomDirectly(targetPlayerId: string) {
-    if (selectedAttackers.length !== 1) return;
+    // >1 atakujący: atak łączony (Ent/Cyklop/Horda) kończący przeciwnika, który nie ma już
+    // żadnych jednostek — serwer liczy pełne obrażenia combo jako jedną alokację w Królestwo.
+    if (selectedAttackers.length === 0) return;
     sendAction({
       type: "ATTACK",
       matchPlayerId: myPlayerId,
@@ -284,7 +286,9 @@ function GameBoard({
   }
 
   function canAttackKingdomDirectly(opponentId: string): boolean {
-    if (!selectedAttackerCard) return false;
+    // Dozwolone też dla >1 wybranego atakującego (atak łączony Ent/Cyklop/Horda) — żaden z tych
+    // combosów nie ma Jadowitego Prysku, więc dla nich liczy się wyłącznie brak jednostek u wroga.
+    if (selectedAttackers.length === 0) return false;
     const opponent = gameState.players.find((p) => p.matchPlayerId === opponentId);
     if (opponent?.eliminated) return false;
     return Boolean(selectedAttackerCanIgnoreUnits) || !opponentHasAnyUnitAnywhere(opponentId);

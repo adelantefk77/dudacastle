@@ -106,7 +106,15 @@ function requireOwnedActingCard(state: GameState, matchPlayerId: string, instanc
   if (!card || card.ownerMatchPlayerId !== matchPlayerId || !inAllowedZone) {
     throw new GameRuleError("Nieprawidłowy atakujący.", "INVALID_ATTACKER");
   }
-  if (card.status.hasAttacked) {
+  // Warownia daje 2 działania (atak/zdolność) w jednej turze — `hasAttacked` (globalna blokada
+  // "już atakowała w tej turze") nie ma tu zastosowania, limit pilnuje `actionsTakenThisTurn`
+  // (zob. consumeStrongholdAction) i tak zresetowany po pierwszym ataku licznik pozwoliłby na
+  // nieskończone ataki, gdyby nie ten limit.
+  if (card.zone === "stronghold") {
+    if ((card.status.actionsTakenThisTurn ?? 0) >= 2) {
+      throw new GameRuleError("Ta jednostka wykorzystała już oba działania w Warowni.", "STRONGHOLD_ACTIONS_EXHAUSTED");
+    }
+  } else if (card.status.hasAttacked) {
     throw new GameRuleError(
       "Ta jednostka wykonała już swój atak w tej turze (obrażenia i ataki nie przechodzą między turami).",
       "ALREADY_ATTACKED",
@@ -143,6 +151,39 @@ function destroyUnit(
   }
 }
 
+/** Nie można atakować własnych jednostek ani własnego Królestwa (klient nie jest zaufany co do treści `targetPlayerId`). */
+function assertNotSelfTarget(attackerOwnerMatchPlayerId: string, targetPlayerId: string): void {
+  if (attackerOwnerMatchPlayerId === targetPlayerId) {
+    throw new GameRuleError("Nie możesz atakować własnych jednostek ani własnego Królestwa.", "CANNOT_ATTACK_SELF");
+  }
+}
+
+/** Atak bezpośredni w Królestwo — współdzielone przez pojedynczy atak i atak łączony (Ent/Cyklop/Horda kończące pustego przeciwnika). */
+function applyKingdomDamage(
+  state: GameState,
+  catalog: CardCatalog,
+  attackerOwnerMatchPlayerId: string,
+  attackerInstanceIds: string[],
+  targetPlayerId: string,
+  damage: number,
+  ignoreBlockingUnits: boolean,
+  emit: Emit,
+): void {
+  assertNotSelfTarget(attackerOwnerMatchPlayerId, targetPlayerId);
+  const opponent = getPlayer(state, targetPlayerId);
+  assertPlayerNotUntargetable(opponent);
+  // Atak bezpośredni w Królestwo jest dozwolony, jeśli przeciwnik nie posiada żadnych jednostek
+  // blokujących (nawet w Warowni) — Jadowity Prysk to jedyny wyjątek, który POMIJA istniejące jednostki.
+  if (!ignoreBlockingUnits && hasAnyUnitAnywhere(state, catalog, targetPlayerId)) {
+    throw new GameRuleError(
+      "Przeciwnik posiada jednostki blokujące bezpośredni atak w Królestwo.",
+      "OPPONENT_HAS_BLOCKING_UNITS",
+    );
+  }
+  opponent.kingdomHp -= damage;
+  emit("KINGDOM_ATTACKED_DIRECTLY", { attackerInstanceIds, targetPlayerId, damage });
+}
+
 function applyDamageToTarget(
   state: GameState,
   catalog: CardCatalog,
@@ -154,6 +195,7 @@ function applyDamageToTarget(
   if (alloc.targetInstanceId === "kingdom") {
     throw new GameRuleError("Atak bezpośredni w Królestwo jest dostępny tylko dla zdolności Jadowity Prysk.", "DIRECT_KINGDOM_ATTACK_NOT_ALLOWED");
   }
+  assertNotSelfTarget(representativeAttacker.ownerMatchPlayerId, alloc.targetPlayerId);
   const targetCard = state.cards[alloc.targetInstanceId];
   if (!targetCard || targetCard.ownerMatchPlayerId !== alloc.targetPlayerId) {
     throw new GameRuleError("Nieprawidłowy cel ataku.", "INVALID_TARGET");
@@ -210,25 +252,23 @@ function resolveSingleAttack(
   const specialAbility = attackerDef.abilities.find((a) => a.effectKey === "directOrInfraKillInsteadOfAttack");
 
   if (target.targetInstanceId === "kingdom") {
-    const opponent = getPlayer(state, target.targetPlayerId);
-    assertPlayerNotUntargetable(opponent);
-    // Atak bezpośredni w Królestwo jest dozwolony dla KAŻDEJ jednostki, jeśli przeciwnik nie
-    // posiada żadnych jednostek blokujących (nawet w Warowni) — Jadowity Prysk to jedyny
-    // wyjątek, który POMIJA istniejące jednostki zamiast wymagać ich braku.
-    if (!specialAbility && hasAnyUnitAnywhere(state, catalog, target.targetPlayerId)) {
-      throw new GameRuleError(
-        "Przeciwnik posiada jednostki blokujące bezpośredni atak w Królestwo.",
-        "OPPONENT_HAS_BLOCKING_UNITS",
-      );
-    }
     const damage = effectiveAttackDamage(state, attacker);
-    opponent.kingdomHp -= damage;
+    applyKingdomDamage(
+      state,
+      catalog,
+      attacker.ownerMatchPlayerId,
+      [attacker.instanceId],
+      target.targetPlayerId,
+      damage,
+      Boolean(specialAbility),
+      emit,
+    );
     attacker.status.hasAttacked = true;
-    emit("KINGDOM_ATTACKED_DIRECTLY", { attackerInstanceId: attacker.instanceId, targetPlayerId: target.targetPlayerId, damage });
     if (specialAbility?.params?.discardAfterUse) moveToDiscard(state, catalog, attacker);
     return;
   }
 
+  assertNotSelfTarget(attacker.ownerMatchPlayerId, target.targetPlayerId);
   const targetCard = state.cards[target.targetInstanceId];
   if (!targetCard || targetCard.ownerMatchPlayerId !== target.targetPlayerId) {
     throw new GameRuleError("Nieprawidłowy cel ataku.", "INVALID_TARGET");
@@ -327,6 +367,9 @@ function resolveJointAttack(
   // (np. pomnożonej przez Hordę); podział na >1 celu wymaga jawnego rozpisania przez klienta.
   const allocations: AttackTarget[] =
     targets.length === 1 ? [{ ...targets[0], damage: totalDamage }] : targets.map((t) => ({ ...t, damage: Number(t.damage ?? 0) }));
+  if (allocations.some((t) => (t.damage ?? 0) < 0)) {
+    throw new GameRuleError("Podział obrażeń nie może zawierać wartości ujemnych.", "JOINT_ATTACK_NEGATIVE_SPLIT");
+  }
   const allocatedSum = allocations.reduce((sum, t) => sum + (t.damage ?? 0), 0);
   if (targets.length > 1 && allocatedSum !== totalDamage) {
     throw new GameRuleError(
@@ -339,8 +382,23 @@ function resolveJointAttack(
     a.status.hasAttacked = true;
   });
   const attackerInstanceIds = attackers.map((a) => a.instanceId);
+  const attackerOwnerMatchPlayerId = attackers[0].ownerMatchPlayerId;
   for (const alloc of allocations) {
-    applyDamageToTarget(state, catalog, attackers[0], attackerInstanceIds, alloc, emit);
+    if (alloc.targetInstanceId === "kingdom") {
+      // Combo dobijające przeciwnika bez żadnych jednostek — te same zasady co pojedynczy atak w Królestwo.
+      applyKingdomDamage(
+        state,
+        catalog,
+        attackerOwnerMatchPlayerId,
+        attackerInstanceIds,
+        alloc.targetPlayerId,
+        Number(alloc.damage ?? 0),
+        false,
+        emit,
+      );
+    } else {
+      applyDamageToTarget(state, catalog, attackers[0], attackerInstanceIds, alloc, emit);
+    }
   }
   emit("JOINT_ATTACK_RESOLVED", { attackerInstanceIds, totalDamage, ability: jointAbility.key });
 }

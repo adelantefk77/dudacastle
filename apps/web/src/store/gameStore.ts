@@ -54,7 +54,13 @@ function attachMatchListeners(set: (partial: Partial<GameStore>) => void, get: (
 
 function attachLobbyListeners(set: (partial: Partial<GameStore>) => void, get: () => GameStore, lobbyId: string) {
   const socket = getSocket();
-  socket.emit("join_lobby", { lobbyId });
+  // Jak w attachMatchListeners: pokój Socket.IO jest przypisany do połączenia, więc reconnect w
+  // poczekalni (np. host traci WiFi zanim reszta dołączy) gubi członkostwo w `lobby:${lobbyId}` —
+  // bez ponownego join_lobby przy każdym "connect" host nigdy nie dostałby "match_started".
+  const joinLobbyRoom = () => socket.emit("join_lobby", { lobbyId });
+  joinLobbyRoom();
+  socket.off("connect");
+  socket.on("connect", joinLobbyRoom);
   socket.off("match_started");
   socket.on("match_started", ({ matchId }: { matchId: string }) => {
     set({ matchId, phase: "playing" });
