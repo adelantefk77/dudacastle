@@ -74,6 +74,8 @@ export interface PlayerState {
   kingdomId: string;
   seatOrder: number;
   kingdomHp: number;
+  /** Startowe (maksymalne) HP Królestwa wg liczby graczy — leczenie (Uzdrowienie, Sprzyjająca Pogoda...) nie może go przekroczyć. */
+  maxKingdomHp: number;
   coins: number;
   eliminated: boolean;
   hasMadeDrawChoiceThisTurn: boolean;

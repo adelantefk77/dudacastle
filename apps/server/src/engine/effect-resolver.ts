@@ -62,7 +62,8 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
 
   // Uzdrowienie (Faun, Druid, Feniks, Mag)
   healKingdom: ({ state, ownerMatchPlayerId, params }) => {
-    getPlayer(state, ownerMatchPlayerId).kingdomHp += Number(params?.amount ?? 1);
+    const player = getPlayer(state, ownerMatchPlayerId);
+    player.kingdomHp = Math.min(player.kingdomHp + Number(params?.amount ?? 1), player.maxKingdomHp);
   },
 
   // Wzmocnienie (Faun, Druid, Feniks, Mag, Elf Świetlisty) — jednorazowy przyrost na start tury, nie aura ciągła.
@@ -252,7 +253,9 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
   // Sprzyjająca Pogoda
   healAllKingdoms: ({ state, params }) => {
     const amount = Number(params?.amount ?? 1);
-    for (const player of state.players) if (!player.eliminated) player.kingdomHp += amount;
+    for (const player of state.players) {
+      if (!player.eliminated) player.kingdomHp = Math.min(player.kingdomHp + amount, player.maxKingdomHp);
+    }
   },
 
   // Zachodni Wiatr

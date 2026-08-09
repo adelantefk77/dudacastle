@@ -80,6 +80,7 @@ export function createMatch(matchId: string, seats: SeatConfig[]): GameState {
       kingdomId: seat.kingdomId,
       seatOrder: players.length,
       kingdomHp: startingHp,
+      maxKingdomHp: startingHp,
       coins: STARTING_COINS,
       eliminated: false,
       hasMadeDrawChoiceThisTurn: false,
