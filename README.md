@@ -18,7 +18,7 @@ WebSocket (Socket.IO) i zbudowany frontend (`apps/web/dist`) z tego samego origi
 CORS-a i bez cross-origin WebSocketu w produkcji.
 
 1. Połącz repozytorium z Railway (nowy projekt → Deploy from GitHub repo).
-2. Railway wykryje `railway.json` w katalogu głównym — build: `npm ci && npm run build`,
+2. Railway wykryje `railway.json` w katalogu głównym — build: `npm install && npm run build`,
    start: `npm start`. Zmienna `PORT` jest wstrzykiwana automatycznie przez Railway.
 3. **Trwałość (opcjonalna)**: bez bazy danych gra działa w pełni w pamięci procesu (mecze
    znikają po restarcie). Żeby włączyć historię/reconnect:
