@@ -48,9 +48,6 @@ export function UnitCard({ definition, instance, selected = false, onClick }: Un
       <header className="unit-card__header">
         {/* Nazwa jest już wypalona w ilustracji dla kart z grafiką — tekstowy nagłówek tylko dla pozostałych. */}
         {!art && <span className="unit-card__name">{definition.name}</span>}
-        <span className="unit-card__cost" aria-label="Koszt zakupu">
-          {definition.cost}💰
-        </span>
       </header>
 
       <div className="unit-card__target" aria-label={`Może atakować: ${TARGET_LABEL[definition.canTarget]}`}>

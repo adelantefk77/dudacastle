@@ -28,7 +28,6 @@ export function EventCardView({ definition, selected = false, onClick }: EventCa
       <header className="event-card__header">
         {/* Nazwa jest już wypalona w ilustracji dla kart z grafiką — tekstowy nagłówek tylko dla pozostałych. */}
         {!art && <span className="event-card__name">{definition.name}</span>}
-        <span className="event-card__cost">{definition.cost}💰</span>
       </header>
       <p className="event-card__description">{definition.description}</p>
       <footer className="event-card__footer">
