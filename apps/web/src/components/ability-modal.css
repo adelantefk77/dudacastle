@@ -1,0 +1,73 @@
+.ability-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.ability-modal {
+  background: #241d15;
+  border: 2px solid #3b3226;
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 280px;
+  color: #f4e9d8;
+  font-family: "Georgia", serif;
+}
+
+.ability-modal__description {
+  font-size: 0.8rem;
+  color: #b9a98a;
+}
+
+.ability-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+}
+
+.ability-modal__field select {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 2px solid #3b3226;
+  background: #2b2116;
+  color: #f4e9d8;
+  font-family: inherit;
+}
+
+.ability-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ability-modal__actions button {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.ability-modal__actions button:last-child {
+  background: #d4a017;
+  color: #2b2116;
+  font-weight: bold;
+}
+
+.ability-modal__actions button:last-child:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ability-modal__actions button:first-child {
+  background: transparent;
+  color: #f4e9d8;
+  border: 1px solid #3b3226;
+}

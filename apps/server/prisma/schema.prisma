@@ -1,0 +1,99 @@
+// Warstwa trwałości jest OPCJONALNA: silnik gry (apps/server/src/engine/*) działa w
+// całości w pamięci procesu i nie zależy od tego schematu. Ta baza służy do:
+//   1) historii/matchmakingu (Match, MatchPlayer, User),
+//   2) odtwarzania stanu po restarcie/reconnect (MatchEvent — append-only log,
+//      MatchSnapshot — okresowy pełny zrzut GameState, żeby nie trzeba było
+//      odtwarzać całej gry od zdarzenia nr 0).
+// Katalog kart (jednostki/Wydarzenia/infrastruktura) celowo NIE jest tu duplikowany:
+// jest danymi statycznymi w packages/shared, wersjonowanymi przez `rulesetVersion`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MatchStatus {
+  WAITING
+  IN_PROGRESS
+  FINISHED
+}
+
+/**
+ * Autoryzacja nie jest jeszcze podłączona (zob. TODO w apps/server/src/index.ts) — na razie
+ * `MatchPlayer.userId` jest luźnym identyfikatorem (bez FK), żeby lobby działało bez pełnego
+ * systemu kont. Ten model istnieje jako docelowy kształt schematu na moment wpięcia auth.
+ */
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  displayName String
+  createdAt   DateTime @default(now())
+
+  @@map("users")
+}
+
+model Match {
+  id                    String        @id @default(cuid())
+  status                MatchStatus   @default(WAITING)
+  playerCount           Int
+  /** Wersja danych kart/reguł użyta w tym meczu (zob. packages/shared) — do debugowania rozgrywek po zmianie balansu. */
+  rulesetVersion        String        @default("1")
+  createdAt             DateTime      @default(now())
+  startedAt             DateTime?
+  endedAt               DateTime?
+  winnerMatchPlayerId   String?
+
+  players               MatchPlayer[]
+  events                MatchEvent[]
+  snapshots             MatchSnapshot[]
+
+  @@map("matches")
+}
+
+model MatchPlayer {
+  /** Ten sam identyfikator co `PlayerState.matchPlayerId` w silniku (zob. engine/match-manager.ts) — brak osobnego mapowania id. */
+  id           String    @id
+  matchId      String
+  match        Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  /** Logiczne odwołanie do User.id, bez wymuszonego FK dopóki auth nie jest wpięte (zob. komentarz przy modelu User). */
+  userId       String
+  kingdomId    String
+  seatOrder    Int
+  eliminatedAt DateTime?
+
+  @@unique([matchId, seatOrder])
+  @@map("match_players")
+}
+
+/** Append-only log zdarzeń zwróconych przez `applyAction` (zob. engine/reducer.ts) — źródło prawdy do replayu. */
+model MatchEvent {
+  id                  String   @id @default(cuid())
+  matchId             String
+  match               Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  sequenceNo          Int
+  actorMatchPlayerId  String?
+  type                String
+  payload             Json
+  createdAt           DateTime @default(now())
+
+  @@unique([matchId, sequenceNo])
+  @@index([matchId])
+  @@map("match_events")
+}
+
+/** Pełny zrzut GameState co N zdarzeń — pozwala odtworzyć stan bez replayu całej historii meczu. */
+model MatchSnapshot {
+  id         String   @id @default(cuid())
+  matchId    String
+  match      Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  sequenceNo Int
+  state      Json
+  createdAt  DateTime @default(now())
+
+  @@unique([matchId, sequenceNo])
+  @@map("match_snapshots")
+}

@@ -1,0 +1,77 @@
+.event-card {
+  position: relative;
+  width: 160px;
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 2px solid #4a3f6b;
+  background: linear-gradient(160deg, #ded8f4 0%, #c3b3e6 100%);
+  color: #201b33;
+  font-family: "Georgia", serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.event-card:hover {
+  transform: translateY(-4px);
+}
+
+.event-card--selected {
+  outline: 3px solid #d4a017;
+  outline-offset: 2px;
+}
+
+.event-card--has-art {
+  /* background-image ustawiane inline w EventCardView.tsx (per-karta ścieżka pliku) */
+  background-size: cover;
+  background-position: center;
+  min-height: 220px;
+  color: #f4e9d8;
+}
+
+.event-card--has-art .event-card__header,
+.event-card--has-art .event-card__description,
+.event-card--has-art .event-card__footer {
+  background: rgba(15, 12, 10, 0.68);
+  border-radius: 6px;
+  padding: 3px 6px;
+  color: #f4e9d8;
+}
+
+.event-card__header {
+  display: flex;
+  justify-content: space-between;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+.event-card__description {
+  font-size: 0.68rem;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.event-card__footer {
+  margin-top: auto;
+}
+
+.event-card__polarity {
+  font-size: 0.6rem;
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
+.event-card__polarity--positive {
+  background: rgba(30, 110, 40, 0.25);
+}
+
+.event-card__polarity--negative {
+  background: rgba(140, 30, 30, 0.25);
+}
+
+.event-card__polarity--mixed {
+  background: rgba(120, 100, 20, 0.25);
+}

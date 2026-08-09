@@ -1,0 +1,37 @@
+.kingdom-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.kingdom-picker__option {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid #4a3b28;
+  background: linear-gradient(180deg, #34291a 0%, #241d15 100%);
+  color: #f4e9d8;
+  font-family: "Georgia", serif;
+  font-size: 0.95rem;
+  cursor: pointer;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: border-color 0.12s ease, transform 0.08s ease, background 0.12s ease;
+}
+
+.kingdom-picker__option:hover:not(:disabled) {
+  border-color: #d4a017;
+  transform: translateY(-1px);
+}
+
+.kingdom-picker__option--selected {
+  background: linear-gradient(180deg, #e6b52e 0%, #c58f10 55%, #a87409 100%);
+  color: #241a08;
+  border-color: #8a6a1f;
+  font-weight: bold;
+  box-shadow: 0 2px 0 #6e4f08, inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.kingdom-picker__option:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

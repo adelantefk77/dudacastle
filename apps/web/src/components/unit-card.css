@@ -1,0 +1,135 @@
+.unit-card {
+  position: relative;
+  width: 140px;
+  min-height: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 2px solid #3b3226;
+  background: linear-gradient(160deg, #f4e9d8 0%, #e6d3b3 100%);
+  color: #2b2116;
+  font-family: "Georgia", serif;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.unit-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+}
+
+.unit-card--has-art {
+  /* background-image ustawiane inline w UnitCard.tsx (per-karta ścieżka pliku) */
+  background-size: cover;
+  background-position: center;
+  color: #f4e9d8;
+}
+
+.unit-card--has-art .unit-card__cost,
+.unit-card--has-art .unit-card__target,
+.unit-card--has-art .unit-card__abilities,
+.unit-card--has-art .unit-card__stats {
+  background: rgba(20, 15, 10, 0.62);
+  border-radius: 6px;
+  padding: 2px 5px;
+}
+
+.unit-card--has-art .unit-card__target {
+  color: #f4e9d8;
+  align-self: flex-start;
+}
+
+.unit-card--has-art .unit-card__abilities li {
+  background: rgba(0, 0, 0, 0.4);
+  color: #f4e9d8;
+}
+
+.unit-card--has-art .unit-card__hp--damaged {
+  color: #ff8a8a;
+}
+
+.unit-card--selected {
+  outline: 3px solid #d4a017;
+  outline-offset: 2px;
+}
+
+.unit-card--spent {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.unit-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-weight: bold;
+}
+
+.unit-card__name {
+  font-size: 0.95rem;
+  line-height: 1.1;
+}
+
+.unit-card__cost {
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.unit-card__target {
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #5a4a34;
+}
+
+.unit-card__abilities {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  font-size: 0.62rem;
+  text-transform: capitalize;
+}
+
+.unit-card__abilities li {
+  background: rgba(59, 50, 38, 0.15);
+  border-radius: 6px;
+  padding: 1px 5px;
+}
+
+.unit-card__no-infra {
+  font-size: 0.62rem;
+  color: #8a2e2e;
+}
+
+.unit-card__stats {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  font-weight: bold;
+  font-size: 0.95rem;
+}
+
+.unit-card__hp--damaged {
+  color: #8a2e2e;
+}
+
+.unit-card__spent-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 15, 10, 0.45);
+  color: #f4e9d8;
+  font-size: 0.75rem;
+  font-weight: bold;
+  border-radius: 8px;
+  pointer-events: none;
+}
