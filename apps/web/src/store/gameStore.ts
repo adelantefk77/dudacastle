@@ -31,7 +31,17 @@ interface GameStore {
 function attachMatchListeners(set: (partial: Partial<GameStore>) => void, get: () => GameStore, matchId: string) {
   const { myMatchPlayerId, sessionToken } = get();
   const socket = getSocket();
-  socket.emit("join_match", { matchId, matchPlayerId: myMatchPlayerId, token: sessionToken });
+
+  // Autoryzacja (join_match) jest przypisana do KONKRETNEGO połączenia transportowego (socket.data
+  // po stronie serwera) — po każdym rozłączeniu (sen laptopa, zgubiony WiFi, uśpiona karta na
+  // telefonie...) socket.io-client sam nawiązuje nowe połączenie, ale serwer nie pamięta już, kim
+  // był ten socket. Bez ponownego join_match przy KAŻDYM "connect" (nie tylko pierwszym) każda
+  // kolejna akcja kończy się "Ten socket nie jest autoryzowany..." mimo że gracz nic złego nie zrobił.
+  const authenticate = () => socket.emit("join_match", { matchId, matchPlayerId: myMatchPlayerId, token: sessionToken });
+  authenticate();
+  socket.off("connect");
+  socket.on("connect", authenticate);
+
   socket.off("state_sync");
   socket.off("events");
   socket.off("action_rejected");
