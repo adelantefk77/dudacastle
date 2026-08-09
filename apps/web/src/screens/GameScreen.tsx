@@ -285,6 +285,8 @@ function GameBoard({
 
   function canAttackKingdomDirectly(opponentId: string): boolean {
     if (!selectedAttackerCard) return false;
+    const opponent = gameState.players.find((p) => p.matchPlayerId === opponentId);
+    if (opponent?.eliminated) return false;
     return Boolean(selectedAttackerCanIgnoreUnits) || !opponentHasAnyUnitAnywhere(opponentId);
   }
 

@@ -54,6 +54,9 @@ export function canAttackerHitTargetCategory(
 }
 
 function assertPlayerNotUntargetable(owner: PlayerState) {
+  if (owner.eliminated) {
+    throw new GameRuleError("Ten gracz został już wyeliminowany.", "PLAYER_ELIMINATED");
+  }
   if (owner.untargetableTurnsRemaining > 0) {
     throw new GameRuleError(
       "Ten gracz jest chwilowo nietykalny (efekt karty Wydarzenia).",
