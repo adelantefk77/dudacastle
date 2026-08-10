@@ -212,7 +212,7 @@ function applyDamageToTarget(
     targetRemainingHp: targetCard.currentHp,
   });
   if (targetCard.currentHp <= 0) {
-    destroyUnit(state, catalog, targetCard, emit, { attackerInstanceIds });
+    destroyUnit(state, catalog, targetCard, emit, { attackerInstanceIds, destroyedByOpponent: true });
   }
 }
 
@@ -282,7 +282,7 @@ function resolveSingleAttack(
       throw new GameRuleError("Jadowity Prysk może eliminować tylko jednostki w infrastrukturze.", "TARGET_NOT_IN_INFRASTRUCTURE");
     }
     attacker.status.hasAttacked = true;
-    destroyUnit(state, catalog, targetCard, emit, { attackerInstanceIds: [attacker.instanceId], ignoredHp: true });
+    destroyUnit(state, catalog, targetCard, emit, { attackerInstanceIds: [attacker.instanceId], ignoredHp: true, destroyedByOpponent: true });
     emit("UNIT_DESTROYED_IGNORING_HP", { attackerInstanceId: attacker.instanceId, targetInstanceId: targetCard.instanceId });
     if (specialAbility.params?.discardAfterUse) moveToDiscard(state, catalog, attacker);
     return;
@@ -307,7 +307,7 @@ function resolveSingleAttack(
   });
 
   const destroyed = targetCard.currentHp <= 0;
-  if (destroyed) destroyUnit(state, catalog, targetCard, emit, { attackerInstanceIds: [attacker.instanceId] });
+  if (destroyed) destroyUnit(state, catalog, targetCard, emit, { attackerInstanceIds: [attacker.instanceId], destroyedByOpponent: true });
   handleChargeFollowUp(state, catalog, attacker, attackerDef, destroyed, emit);
 }
 

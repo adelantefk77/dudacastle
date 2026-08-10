@@ -62,6 +62,27 @@
   transform: translateY(-1px);
 }
 
+.game-screen__log {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid #4a3b28;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 16px;
+  font-size: 0.82rem;
+  color: #d8c7a3;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.game-screen__log-entry {
+  padding: 3px 0;
+  border-bottom: 1px dotted rgba(74, 59, 40, 0.6);
+}
+
+.game-screen__log-entry:last-child {
+  border-bottom: none;
+}
+
 .game-screen__opponents {
   display: flex;
   flex-wrap: wrap;
@@ -88,7 +109,23 @@
 .opponent-board__units {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
+}
+
+.opponent-board__zone {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding: 8px;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.opponent-board__zone h5 {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #b9a98a;
 }
 
 .game-screen__attack-kingdom {

@@ -36,20 +36,30 @@ export function recomputeAuras(state: GameState, catalog: CardCatalog): void {
     let flatAtkBonus = 0; // Natchnienie itp. — jednakowy dla wszystkich jednostek gracza
     let flatHpBonus = player.permanentUnitHpAura; // Płatnerz — trwały, dotyczy też przyszłych jednostek
 
+    // Każda WARUNKOWA aura (np. "2x Ludzie = +1 ATK całej armii") opisuje próg spełniony przez
+    // ARMIĘ, nie bonus przyznawany osobno przez każdą kopię jednostki, która go niesie — bez tej
+    // deduplikacji po `ability.key` 3x Ludzie dawałoby błędnie +3 ATK zamiast +1 (a przy usuwaniu/
+    // dodawaniu jednostek między turami ta nadwyżka rozjeżdżała currentAtk, bo poniższa pętla
+    // aplikuje tylko RÓŻNICĘ względem poprzednio zapisanego bonusu).
+    const countedAtkAbilities = new Set<string>();
     for (const unit of units) {
       const def = getUnitDefinition(catalog, unit.definitionId);
       for (const ability of def.abilities) {
-        if (ability.trigger !== "passive_aura") continue;
+        if (ability.trigger !== "passive_aura" || countedAtkAbilities.has(ability.key)) continue;
         const params = ability.params ?? {};
         switch (ability.effectKey) {
           case "auraAtkAllOwnUnits":
             flatAtkBonus += Number(params.amount ?? 0);
+            countedAtkAbilities.add(ability.key);
             break;
           case "conditionalAuraAtkIfUnitCount": {
             const requiredCount = Number(params.requiredCount ?? 0);
             const name = String(params.unitName ?? "");
             const count = unitNames.filter((n) => n === name).length;
-            if (count >= requiredCount) flatAtkBonus += Number(params.amount ?? 0);
+            if (count >= requiredCount) {
+              flatAtkBonus += Number(params.amount ?? 0);
+              countedAtkAbilities.add(ability.key);
+            }
             break;
           }
           default:
@@ -58,14 +68,25 @@ export function recomputeAuras(state: GameState, catalog: CardCatalog): void {
       }
     }
 
-    // Aury warunkujące HP liczone osobno, bo część (Śpiew Natury) wymaga współwystępowania konkretnego zestawu jednostek.
+    // Aury warunkujące HP liczone osobno (ta sama deduplikacja co powyżej), bo część (Śpiew Natury)
+    // wymaga współwystępowania konkretnego zestawu jednostek.
+    const countedHpAbilities = new Set<string>();
     for (const unit of units) {
       const def = getUnitDefinition(catalog, unit.definitionId);
       for (const ability of def.abilities) {
-        if (ability.trigger !== "passive_aura" || ability.effectKey !== "conditionalAuraHpIfUnitsPresent") continue;
+        if (
+          ability.trigger !== "passive_aura" ||
+          ability.effectKey !== "conditionalAuraHpIfUnitsPresent" ||
+          countedHpAbilities.has(ability.key)
+        ) {
+          continue;
+        }
         const requiresNames = (ability.params?.requiresUnitNames as string[] | undefined) ?? [];
         const satisfied = requiresNames.every((n) => unitNames.includes(n));
-        if (satisfied) flatHpBonus += Number(ability.params?.amount ?? 0);
+        if (satisfied) {
+          flatHpBonus += Number(ability.params?.amount ?? 0);
+          countedHpAbilities.add(ability.key);
+        }
       }
     }
 

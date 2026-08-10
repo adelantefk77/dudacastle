@@ -47,7 +47,10 @@ function attachMatchListeners(set: (partial: Partial<GameStore>) => void, get: (
   socket.off("action_rejected");
   socket.off("error");
   socket.on("state_sync", (state: GameState) => set({ gameState: state, phase: "playing" }));
-  socket.on("events", (events: GameEvent[]) => set({ recentEvents: events }));
+  // Dokładamy do dziennika zamiast nadpisywać — inaczej gracz nie widzi, co się właśnie
+  // rozegrało (np. natychmiastowy efekt karty Wydarzenia), bo kolejna akcja (własna albo bota)
+  // od razu kasowała poprzednią paczkę zdarzeń. Ograniczone do ostatnich 40, żeby nie rosło bez końca.
+  socket.on("events", (events: GameEvent[]) => set({ recentEvents: [...get().recentEvents, ...events].slice(-40) }));
   socket.on("action_rejected", (payload: { code?: string; message: string }) => set({ lastError: payload.message }));
   socket.on("error", (payload: { message: string }) => set({ lastError: payload.message }));
 }

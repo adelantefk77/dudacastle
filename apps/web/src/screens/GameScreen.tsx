@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { CardInstance, GameState } from "@dudacastle/shared";
+import type { CardInstance, GameEvent, GameState } from "@dudacastle/shared";
 import { KINGDOMS } from "@dudacastle/shared";
 import { useGameStore } from "../store/gameStore";
 import { getCardDefinition } from "../lib/catalog";
@@ -26,10 +26,103 @@ function isInfra(card: CardInstance): boolean {
   return getCardDefinition(card.definitionId)?.type === "infrastructure";
 }
 
+/**
+ * Tłumaczy surowe zdarzenia silnika na czytelne komunikaty — bez tego zagranie karty Wydarzenia
+ * (zwłaszcza natychmiastowej, która nigdy nie trafia na ekran jako karta) było niewidoczne: efekt
+ * się rozgrywał po stronie serwera, ale gracz nie miał żadnej informacji, co się właśnie stało.
+ */
+function describeEvent(event: GameEvent, gameState: GameState): string | null {
+  const cardLabel = (id: unknown) => {
+    const card = gameState.cards[String(id)];
+    const def = card ? getCardDefinition(card.definitionId) : undefined;
+    return def?.name ?? "karta";
+  };
+  const playerLabel = (id: unknown) => {
+    const player = gameState.players.find((p) => p.matchPlayerId === id);
+    return player ? kingdomName(player.kingdomId) : "gracz";
+  };
+  const p = event.payload;
+  switch (event.type) {
+    case "EVENT_CARD_BOUGHT": {
+      const card = gameState.cards[String(p.cardInstanceId)];
+      const def = card ? getCardDefinition(card.definitionId) : undefined;
+      if (def?.type === "event") {
+        return p.timing === "held_one_shot"
+          ? `Kupiono Wydarzenie „${def.name}" — trafiło na rękę, zagraj je w dogodnym momencie.`
+          : `Kupiono Wydarzenie „${def.name}": ${def.description}`;
+      }
+      return "Kupiono kartę Wydarzenia.";
+    }
+    case "EVENT_CARD_PLAYED":
+      return `Zagrano Wydarzenie „${cardLabel(p.cardInstanceId)}".`;
+    case "ATTACK_RESOLVED":
+      return `Atak zadał ${p.damage} obrażeń (cel: ${p.targetRemainingHp} HP pozostało).`;
+    case "JOINT_ATTACK_RESOLVED":
+      return `Atak łączony zadał ${p.totalDamage} obrażeń.`;
+    case "KINGDOM_ATTACKED_DIRECTLY":
+      return `Atak bezpośrednio w Królestwo (${playerLabel(p.targetPlayerId)}) — ${p.damage} obrażeń.`;
+    case "UNIT_DESTROYED":
+    case "UNIT_DESTROYED_IGNORING_HP":
+      return `Zniszczono jednostkę: ${cardLabel(p.cardInstanceId)}.`;
+    case "UNIT_BOUGHT":
+      return "Kupiono jednostkę z Talii Królestwa (w ciemno, trafia na stos odrzuconych).";
+    case "INFRASTRUCTURE_BOUGHT":
+      return `Kupiono infrastrukturę: ${p.kind}.`;
+    case "INFRASTRUCTURE_POOL_EXHAUSTED":
+      return "Brak dostępnej infrastruktury tego typu we wspólnej puli.";
+    case "PLAYER_ELIMINATED":
+      return `Gracz wyeliminowany: ${playerLabel(p.matchPlayerId)}.`;
+    case "GAME_FINISHED":
+      return p.winnerMatchPlayerId ? `Koniec gry — zwycięzca: ${playerLabel(p.winnerMatchPlayerId)}!` : "Koniec gry — remis.";
+    case "CARDS_DRAWN":
+      return `Dobrano ${p.count} kart(y) z Talii Startowej.`;
+    case "COINS_TAKEN":
+      return `Wzięto ${p.amount} monety.`;
+    case "INCOME_COLLECTED":
+      return `Dochód na start tury: +${p.amount} monet.`;
+    case "TURN_SKIPPED":
+      return `${playerLabel(p.matchPlayerId)} pomija turę.`;
+    case "CHARGE_BONUS_ATTACK_AVAILABLE":
+      return "Szarża: dostępny dodatkowy atak.";
+    case "CROSS_TRAINING_TRIGGERED":
+      return "Koszary: Cross Training — automatyczny atak z podwojonym ATK.";
+    case "KRASNOLUD_MERGED_INTO_KATAPULTA":
+      return "Dwa Krasnoludy połączone w Katapultę.";
+    default:
+      return null; // przefiltrowywane niżej
+  }
+}
+
 type ModalState = { title: string; description?: string; fields: ModalField[]; onConfirm: (v: Record<string, string>) => void } | null;
 
+interface EventLogProps {
+  events: GameEvent[];
+  gameState: GameState;
+}
+
+/** Dziennik ostatnich zdarzeń — jedyne miejsce, w którym widać co faktycznie zrobił efekt karty Wydarzenia, atak, itd. */
+function EventLog({ events, gameState }: EventLogProps) {
+  const described = events
+    .map((e) => ({ e, text: describeEvent(e, gameState) }))
+    .filter((x): x is { e: GameEvent; text: string } => x.text !== null)
+    .slice(-8)
+    .reverse();
+
+  if (described.length === 0) return null;
+
+  return (
+    <div className="game-screen__log">
+      {described.map(({ e, text }) => (
+        <div key={`${e.sequenceNo}-${e.type}`} className="game-screen__log-entry">
+          {text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function GameScreen() {
-  const { gameState, myMatchPlayerId, sendAction, lastError, dismissError, resetToLanding } = useGameStore();
+  const { gameState, myMatchPlayerId, sendAction, lastError, dismissError, resetToLanding, recentEvents } = useGameStore();
   const [selectedHandUnitId, setSelectedHandUnitId] = useState<string | null>(null);
   const [selectedAttackers, setSelectedAttackers] = useState<string[]>([]);
   const [modal, setModal] = useState<ModalState>(null);
@@ -48,6 +141,7 @@ export function GameScreen() {
       lastError={lastError}
       dismissError={dismissError}
       resetToLanding={resetToLanding}
+      recentEvents={recentEvents}
       selectedHandUnitId={selectedHandUnitId}
       setSelectedHandUnitId={setSelectedHandUnitId}
       selectedAttackers={selectedAttackers}
@@ -66,6 +160,7 @@ interface GameBoardProps {
   lastError: string | null;
   dismissError: () => void;
   resetToLanding: () => void;
+  recentEvents: ReturnType<typeof useGameStore.getState>["recentEvents"];
   selectedHandUnitId: string | null;
   setSelectedHandUnitId: (id: string | null) => void;
   selectedAttackers: string[];
@@ -82,6 +177,7 @@ function GameBoard({
   lastError,
   dismissError,
   resetToLanding,
+  recentEvents,
   selectedHandUnitId,
   setSelectedHandUnitId,
   selectedAttackers,
@@ -142,6 +238,35 @@ function GameBoard({
         ],
         onConfirm: (values) => {
           sendAction({ type: "PLAY_EVENT_FROM_HAND", matchPlayerId: myPlayerId, cardInstanceId: card.instanceId, params: values });
+          closeModal();
+        },
+      });
+      return;
+    }
+
+    if (def.effectKey === "relocateOwnUnitThenDiscard") {
+      setModal({
+        title: def.name,
+        description: def.description,
+        fields: [
+          {
+            key: "cardInstanceId",
+            label: "Jednostka",
+            options: myPlayArea.map((u) => ({ value: u.instanceId, label: getCardDefinition(u.definitionId)?.name ?? u.definitionId })),
+          },
+          {
+            key: "targetSlotIndex",
+            label: "Wolne miejsce",
+            options: Array.from(freeSlots).map((i) => ({ value: String(i), label: `Miejsce ${i + 1}` })),
+          },
+        ],
+        onConfirm: (values) => {
+          sendAction({
+            type: "PLAY_EVENT_FROM_HAND",
+            matchPlayerId: myPlayerId,
+            cardInstanceId: card.instanceId,
+            params: { cardInstanceId: values.cardInstanceId, targetSlotIndex: Number(values.targetSlotIndex) },
+          });
           closeModal();
         },
       });
@@ -314,6 +439,8 @@ function GameBoard({
         </button>
       </header>
 
+      <EventLog events={recentEvents} gameState={gameState} />
+
       {gameState.status === "finished" && (
         <div className="game-screen__banner">
           {gameState.winnerMatchPlayerId === myMatchPlayerId ? "Wygrałeś! 🎉" : "Twoje Królestwo zostało zniszczone."}
@@ -321,32 +448,65 @@ function GameBoard({
       )}
 
       <section className="game-screen__opponents">
-        {opponents.map((opp) => (
-          <div key={opp.matchPlayerId} className="opponent-board">
-            <h3>
-              {opp.isBot && "🤖 "}
-              {kingdomName(opp.kingdomId)} — ❤️{opp.kingdomHp} 💰{opp.coins} {opp.eliminated ? "(wyeliminowany)" : ""}
-            </h3>
-            <div className="opponent-board__units">
-              {(["play_area", "tower", "mine", "barracks"] as const).flatMap((zone) =>
-                cardsOf(gameState, opp.matchPlayerId, zone)
-                  .filter(isUnit)
-                  .map((card) => (
-                    <BattlefieldUnit
-                      key={card.instanceId}
-                      card={card}
-                      onSelect={() => attackTarget(card.instanceId, opp.matchPlayerId)}
-                    />
-                  )),
+        {opponents.map((opp) => {
+          const oppOwnsTower = cardsOf(gameState, opp.matchPlayerId, "tower").some(isInfra);
+          const oppOwnsMine = cardsOf(gameState, opp.matchPlayerId, "mine").some(isInfra);
+          const oppOwnsBarracks = cardsOf(gameState, opp.matchPlayerId, "barracks").some(isInfra);
+          const oppOwnsStronghold = cardsOf(gameState, opp.matchPlayerId, "stronghold").some(isInfra);
+          const oppPlayArea = cardsOf(gameState, opp.matchPlayerId, "play_area").filter(isUnit);
+          const oppStrongholdUnits = cardsOf(gameState, opp.matchPlayerId, "stronghold").filter(isUnit);
+
+          return (
+            <div key={opp.matchPlayerId} className="opponent-board">
+              <h3>
+                {opp.isBot && "🤖 "}
+                {kingdomName(opp.kingdomId)} — ❤️{opp.kingdomHp} 💰{opp.coins} {opp.eliminated ? "(wyeliminowany)" : ""}
+              </h3>
+              {/* Każda strefa (obszar gry / infrastruktura) oznaczona osobno — bez tego nie widać, czy
+                  dana karta przeciwnika stoi w Kopalni, Wieży czy Koszarach, co uniemożliwiało planowanie ataków. */}
+              <div className="opponent-board__units">
+                <OpponentZone label="Obszar gry" units={oppPlayArea} opponentId={opp.matchPlayerId} attackTarget={attackTarget} />
+                {oppOwnsTower && (
+                  <OpponentZone
+                    label="Wieża"
+                    units={cardsOf(gameState, opp.matchPlayerId, "tower").filter(isUnit)}
+                    opponentId={opp.matchPlayerId}
+                    attackTarget={attackTarget}
+                  />
+                )}
+                {oppOwnsMine && (
+                  <OpponentZone
+                    label="Kopalnia"
+                    units={cardsOf(gameState, opp.matchPlayerId, "mine").filter(isUnit)}
+                    opponentId={opp.matchPlayerId}
+                    attackTarget={attackTarget}
+                  />
+                )}
+                {oppOwnsBarracks && (
+                  <OpponentZone
+                    label="Koszary"
+                    units={cardsOf(gameState, opp.matchPlayerId, "barracks").filter(isUnit)}
+                    opponentId={opp.matchPlayerId}
+                    attackTarget={attackTarget}
+                  />
+                )}
+                {oppOwnsStronghold && (
+                  <div className="opponent-board__zone">
+                    <h5>Warownia</h5>
+                    <span className="infra-zone__empty">
+                      {oppStrongholdUnits.length === 0 ? "pusto" : `${oppStrongholdUnits.length}× (nie do ataku, blokuje zamek)`}
+                    </span>
+                  </div>
+                )}
+              </div>
+              {canAttackKingdomDirectly(opp.matchPlayerId) && (
+                <button type="button" className="game-screen__attack-kingdom" onClick={() => attackKingdomDirectly(opp.matchPlayerId)}>
+                  Zaatakuj Królestwo bezpośrednio
+                </button>
               )}
             </div>
-            {canAttackKingdomDirectly(opp.matchPlayerId) && (
-              <button type="button" className="game-screen__attack-kingdom" onClick={() => attackKingdomDirectly(opp.matchPlayerId)}>
-                Zaatakuj Królestwo bezpośrednio
-              </button>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </section>
 
       <section className="my-board">
@@ -457,6 +617,29 @@ function GameBoard({
         />
       </section>
     </main>
+  );
+}
+
+interface OpponentZoneProps {
+  label: string;
+  units: CardInstance[];
+  opponentId: string;
+  attackTarget: (targetInstanceId: string, targetPlayerId: string) => void;
+}
+
+/** Jak InfraZone, ale dla planszy przeciwnika: klik na jednostkę wybiera ją jako cel ataku zamiast atakującego. */
+function OpponentZone({ label, units, opponentId, attackTarget }: OpponentZoneProps) {
+  return (
+    <div className="opponent-board__zone">
+      <h5>{label}</h5>
+      {units.length === 0 ? (
+        <span className="infra-zone__empty">pusto</span>
+      ) : (
+        units.map((card) => (
+          <BattlefieldUnit key={card.instanceId} card={card} onSelect={() => attackTarget(card.instanceId, opponentId)} />
+        ))
+      )}
+    </div>
   );
 }
 
