@@ -1,13 +1,13 @@
 import { nanoid } from "nanoid";
-import type { CardInstance, GameState } from "@dudacastle/shared";
+import type { CardInstance, GameState, Zone } from "@dudacastle/shared";
 import { BATTLEFIELD_ZONES } from "@dudacastle/shared";
 import type { CardCatalog } from "./catalog.js";
 import { getUnitDefinition } from "./catalog.js";
 import { drawFromStartingDeck } from "./deck-utils.js";
 import { GameRuleError } from "./errors.js";
-import { cardsInZone, getPlayer, unitSlotCapacity } from "./selectors.js";
+import { cardsInZone, getPlayer } from "./selectors.js";
 import { drawAndPlaceFromStartingDeck, placeUnitBaseStats } from "./unit-lifecycle.js";
-import { findFreeSlotIndex, moveToDiscard, moveToHand } from "./zones.js";
+import { findFreeSlotIndex, moveToDiscard, moveToHand, relocateUnitToZone } from "./zones.js";
 // Import cykliczny z combat.ts (które importuje stąd `resolveEffect`) — bezpieczny, bo obie strony
 // używają importowanych funkcji WYŁĄCZNIE wewnątrz ciał innych funkcji, nigdy na poziomie modułu.
 import { destroyUnit } from "./combat.js";
@@ -15,17 +15,6 @@ import { destroyUnit } from "./combat.js";
 /** Heurystyka "jak dobra jest ta karta" — zob. cards.py priority_score (uproszczona: bez bonusów per-zdolność). */
 function unitValueHeuristic(def: { atk: number; hp: number }): number {
   return def.atk * 1.5 + def.hp * 0.5;
-}
-
-/**
- * Klient nie jest zaufany co do `targetSlotIndex` (Harpii Zryw, Powietrzny Transport, Zamieszanie)
- * — bez tej walidacji `Number(undefined)` (NaN) albo poza-zakresowy indeks przechodziłby
- * sprawdzenie zajętości (żadna karta nigdy nie ma `slotIndex === NaN`) i zapisywałby nielegalny slot.
- */
-function assertValidPlayAreaSlot(state: GameState, matchPlayerId: string, targetSlot: number): void {
-  if (!Number.isInteger(targetSlot) || targetSlot < 0 || targetSlot >= unitSlotCapacity(state, matchPlayerId)) {
-    throw new GameRuleError("Nieprawidłowe miejsce docelowe.", "INVALID_SLOT_INDEX");
-  }
 }
 
 export interface EffectContext {
@@ -112,12 +101,13 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
   },
 
   // Powstanie z popiołów (Feniks, on_death, tylko gdy odrzucony przez przeciwnika)
-  replaceWithNextStartingDeckCardOnEnemyDiscard: ({ state, catalog, sourceCard, ownerMatchPlayerId, actionParams }) => {
+  replaceWithNextStartingDeckCardOnEnemyDiscard: ({ state, catalog, ownerMatchPlayerId, actionParams }) => {
     if (!actionParams?.destroyedByOpponent) return;
-    const slotIndex = sourceCard.slotIndex;
-    if (slotIndex === null) return;
+    // Uwaga: NIE sprawdzać sourceCard.slotIndex tutaj — destroyUnit() wywołuje moveToDiscard PRZED
+    // odpaleniem on_death, więc slotIndex Feniksa jest już `null` w tym momencie (dawny warunek
+    // "if (slotIndex === null) return" był martwy i zawsze przerywał efekt). drawAndPlaceFromStartingDeck
+    // i tak sam znajduje wolne miejsce przez findFreeSlotIndex, więc ten odczyt nie był w ogóle potrzebny.
     drawAndPlaceFromStartingDeck(state, catalog, ownerMatchPlayerId, 0);
-    void slotIndex; // miejsce Feniksa już zwolnione przez moveToDiscard w reducerze przed wywołaniem tego efektu
   },
 
   // Przywołanie (Emisariusz En-šukud, on_death) — jeśli para odrzucona w tej samej turze.
@@ -145,32 +135,32 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
     moveToDiscard(state, catalog, hand[0]);
   },
 
-  // Harpii Zryw / Galop (activated) — przenosi tę jednostkę na wskazane wolne miejsce.
-  relocateSelf: ({ state, sourceCard, ownerMatchPlayerId, actionParams }) => {
-    const targetSlot = Number(actionParams?.targetSlotIndex);
-    assertValidPlayAreaSlot(state, ownerMatchPlayerId, targetSlot);
-    const occupied = cardsInZone(state, ownerMatchPlayerId, "play_area").some(
-      (c) => c.slotIndex === targetSlot && c.instanceId !== sourceCard.instanceId,
-    );
-    if (occupied) throw new GameRuleError("Docelowe miejsce jest zajęte.", "SLOT_OCCUPIED");
-    sourceCard.slotIndex = targetSlot;
+  // Harpii Zryw / Galop (activated) — przenosi tę jednostkę do dowolnej posiadanej strefy
+  // (play_area albo Wieża/Kopalnia/Koszary/Warownia) — zob. simulator_v3.py try_reposition_unit,
+  // które pozwala na dokładnie to samo (nie tylko przesunięcie w obrębie play_area).
+  relocateSelf: ({ state, catalog, sourceCard, ownerMatchPlayerId, actionParams }) => {
+    const targetZone = (actionParams?.targetZone as Zone | undefined) ?? "play_area";
+    relocateUnitToZone(state, catalog, sourceCard, ownerMatchPlayerId, targetZone);
     sourceCard.status.activatedAbilityUsedThisTurn = true;
   },
 
-  // Powietrzny Transport (Pegaz, activated) — przenosi INNĄ sojuszniczą jednostkę.
-  relocateAllyOncePerTurn: ({ state, sourceCard, ownerMatchPlayerId, actionParams }) => {
+  // Powietrzny Transport (Pegaz, activated) — przenosi INNĄ sojuszniczą jednostkę do dowolnej
+  // posiadanej strefy (zob. simulator_v3.py try_pegaz_transport — Wieża dla każdej jednostki,
+  // Kopalnia/Warownia/Koszary tylko jeśli nie infrastructureForbidden, weryfikowane w relocateUnitToZone).
+  relocateAllyOncePerTurn: ({ state, catalog, sourceCard, ownerMatchPlayerId, actionParams }) => {
     const targetId = String(actionParams?.targetInstanceId ?? "");
-    const targetSlot = Number(actionParams?.targetSlotIndex);
+    const targetZone = (actionParams?.targetZone as Zone | undefined) ?? "play_area";
     const ally = state.cards[targetId];
-    if (!ally || ally.ownerMatchPlayerId !== ownerMatchPlayerId || ally.zone !== "play_area") {
+    if (
+      !ally ||
+      ally.instanceId === sourceCard.instanceId ||
+      ally.ownerMatchPlayerId !== ownerMatchPlayerId ||
+      !BATTLEFIELD_ZONES.includes(ally.zone) ||
+      ally.zone === "stronghold"
+    ) {
       throw new GameRuleError("Nieprawidłowa sojusznicza jednostka do przeniesienia.", "INVALID_ALLY_TARGET");
     }
-    assertValidPlayAreaSlot(state, ownerMatchPlayerId, targetSlot);
-    const occupied = cardsInZone(state, ownerMatchPlayerId, "play_area").some(
-      (c) => c.slotIndex === targetSlot && c.instanceId !== ally.instanceId,
-    );
-    if (occupied) throw new GameRuleError("Docelowe miejsce jest zajęte.", "SLOT_OCCUPIED");
-    ally.slotIndex = targetSlot;
+    relocateUnitToZone(state, catalog, ally, ownerMatchPlayerId, targetZone);
     sourceCard.status.activatedAbilityUsedThisTurn = true;
   },
 
@@ -373,19 +363,17 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
   },
 
   // Zamieszanie
-  relocateOwnUnitThenDiscard: ({ state, ownerMatchPlayerId, actionParams }) => {
+  // Zamieszanie — przenosi WŁASNĄ jednostkę z dowolnej strefy obszaru gry (play_area/Wieża/
+  // Kopalnia/Koszary) do dowolnej innej posiadanej strefy, zob. simulator_v3.py try_zamieszanie
+  // (przenosi też np. z Kopalni na planszę albo z planszy do Kopalni, nie tylko w obrębie play_area).
+  relocateOwnUnitThenDiscard: ({ state, catalog, ownerMatchPlayerId, actionParams }) => {
     const cardId = String(actionParams?.cardInstanceId ?? "");
-    const targetSlot = Number(actionParams?.targetSlotIndex);
+    const targetZone = (actionParams?.targetZone as Zone | undefined) ?? "play_area";
     const card = state.cards[cardId];
-    if (!card || card.ownerMatchPlayerId !== ownerMatchPlayerId || card.zone !== "play_area") {
+    if (!card || card.ownerMatchPlayerId !== ownerMatchPlayerId || !BATTLEFIELD_ZONES.includes(card.zone) || card.zone === "stronghold") {
       throw new GameRuleError("Nieprawidłowa jednostka do przeniesienia.", "INVALID_RELOCATE_TARGET");
     }
-    assertValidPlayAreaSlot(state, ownerMatchPlayerId, targetSlot);
-    const occupied = cardsInZone(state, ownerMatchPlayerId, "play_area").some(
-      (c) => c.slotIndex === targetSlot && c.instanceId !== card.instanceId,
-    );
-    if (occupied) throw new GameRuleError("Docelowe miejsce jest zajęte.", "SLOT_OCCUPIED");
-    card.slotIndex = targetSlot;
+    relocateUnitToZone(state, catalog, card, ownerMatchPlayerId, targetZone);
   },
 
   // Goranowe Szczęście

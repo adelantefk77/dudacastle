@@ -245,5 +245,9 @@ export function processTurnEnd(state: GameState, catalog: CardCatalog, matchPlay
     card.currentHp = def.hp + (card.status.permanentHpBonus ?? 0) + (card.status.auraHpBonus ?? 0);
     card.status.hasAttacked = false;
     card.status.tempAtkBonus = 0;
+    // Szarża: jeśli bonusowy atak został przyznany (on_enemy_destroyed), ale gracz go nie zużył w
+    // tej samej turze, flaga zostawała "true" na zawsze — jednostka odpadała po SWOIM PIERWSZYM
+    // ataku w NASTĘPNEJ turze, bo handleChargeFollowUp mylił go z bonusowym atakiem z przeszłości.
+    card.status.chargeBonusAttackAvailable = false;
   }
 }

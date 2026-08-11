@@ -227,6 +227,28 @@ function GameBoard({
   const freeSlots = new Set(Array.from({ length: PLAY_AREA_CAPACITY }, (_, i) => i));
   myPlayArea.forEach((c) => freeSlots.delete(c.slotIndex ?? -1));
 
+  const INFRA_MAX_UNITS = { tower: 2, mine: 1, barracks: 2, stronghold: 1 } as const;
+
+  /**
+   * Strefy, do których dana jednostka może zostać przeniesiona (Harpii Zryw/Galop, Powietrzny
+   * Transport, Zamieszanie) — wcześniej te zdolności pozwalały tylko na przesunięcie w obrębie
+   * play_area, mimo że silnik (i simulator_v3.py) wspiera przenoszenie też do/z infrastruktury.
+   * Serwer i tak waliduje ostatecznie (infrastructureForbidden, limity, posiadanie karty infry).
+   */
+  function relocateZoneOptions(card: CardInstance): { value: string; label: string }[] {
+    const options: { value: string; label: string }[] = [];
+    if (card.zone !== "play_area" && freeSlots.size > 0) options.push({ value: "play_area", label: "Obszar gry" });
+    if (card.zone !== "tower" && ownsTower && myTowerUnits.length < INFRA_MAX_UNITS.tower) options.push({ value: "tower", label: "Wieża" });
+    if (card.zone !== "mine" && ownsMine && myMineUnits.length < INFRA_MAX_UNITS.mine) options.push({ value: "mine", label: "Kopalnia" });
+    if (card.zone !== "barracks" && ownsBarracks && myBarracksUnits.length < INFRA_MAX_UNITS.barracks) {
+      options.push({ value: "barracks", label: "Koszary" });
+    }
+    if (card.zone !== "stronghold" && ownsStronghold && myStrongholdUnits.length < INFRA_MAX_UNITS.stronghold) {
+      options.push({ value: "stronghold", label: "Warownia" });
+    }
+    return options;
+  }
+
   if (!me) {
     return <div className="game-screen__loading">Twój gracz nie jest częścią tego meczu.</div>;
   }
@@ -263,6 +285,11 @@ function GameBoard({
     }
 
     if (def.effectKey === "relocateOwnUnitThenDiscard") {
+      // Zamieszanie: dowolna WŁASNA jednostka z obszaru gry (nie tylko play_area — też Wieża/
+      // Kopalnia/Koszary) do dowolnej innej posiadanej strefy z wolnym miejscem.
+      const relocatableUnits = [...myPlayArea, ...myTowerUnits, ...myMineUnits, ...myBarracksUnits];
+      const allZoneOptions = new Map<string, string>();
+      for (const u of relocatableUnits) for (const opt of relocateZoneOptions(u)) allZoneOptions.set(opt.value, opt.label);
       setModal({
         title: def.name,
         description: def.description,
@@ -270,12 +297,12 @@ function GameBoard({
           {
             key: "cardInstanceId",
             label: "Jednostka",
-            options: myPlayArea.map((u) => ({ value: u.instanceId, label: getCardDefinition(u.definitionId)?.name ?? u.definitionId })),
+            options: relocatableUnits.map((u) => ({ value: u.instanceId, label: getCardDefinition(u.definitionId)?.name ?? u.definitionId })),
           },
           {
-            key: "targetSlotIndex",
-            label: "Wolne miejsce",
-            options: Array.from(freeSlots).map((i) => ({ value: String(i), label: `Miejsce ${i + 1}` })),
+            key: "targetZone",
+            label: "Strefa docelowa",
+            options: Array.from(allZoneOptions, ([value, label]) => ({ value, label })),
           },
         ],
         onConfirm: (values) => {
@@ -283,7 +310,7 @@ function GameBoard({
             type: "PLAY_EVENT_FROM_HAND",
             matchPlayerId: myPlayerId,
             cardInstanceId: card.instanceId,
-            params: { cardInstanceId: values.cardInstanceId, targetSlotIndex: Number(values.targetSlotIndex) },
+            params: { cardInstanceId: values.cardInstanceId, targetZone: values.targetZone },
           });
           closeModal();
         },
@@ -369,9 +396,9 @@ function GameBoard({
     if (ability.effectKey === "relocateSelf") {
       setModal({
         title: ability.description,
-        fields: [{ key: "targetSlotIndex", label: "Wolne miejsce", options: Array.from(freeSlots).map((i) => ({ value: String(i), label: `Miejsce ${i + 1}` })) }],
+        fields: [{ key: "targetZone", label: "Strefa docelowa", options: relocateZoneOptions(card) }],
         onConfirm: (values) => {
-          sendAction({ type: "USE_ABILITY", matchPlayerId: myPlayerId, cardInstanceId: card.instanceId, abilityKey: ability.key, params: { targetSlotIndex: Number(values.targetSlotIndex) } });
+          sendAction({ type: "USE_ABILITY", matchPlayerId: myPlayerId, cardInstanceId: card.instanceId, abilityKey: ability.key, params: { targetZone: values.targetZone } });
           closeModal();
         },
       });
@@ -379,15 +406,20 @@ function GameBoard({
     }
 
     if (ability.effectKey === "relocateAllyOncePerTurn") {
-      const allies = myPlayArea.filter((u) => u.instanceId !== card.instanceId);
+      // Pegaz: sojusznik może pochodzić z dowolnej strefy (nie tylko play_area — też Wieża/
+      // Kopalnia/Koszary), a strefa docelowa zależy od wybranego sojusznika, więc pokazujemy
+      // sumę wszystkich stref osiągalnych dla KTÓREGOKOLWIEK kandydata (serwer i tak zwaliduje).
+      const allies = [...myPlayArea, ...myTowerUnits, ...myMineUnits, ...myBarracksUnits].filter((u) => u.instanceId !== card.instanceId);
+      const allyZoneOptions = new Map<string, string>();
+      for (const u of allies) for (const opt of relocateZoneOptions(u)) allyZoneOptions.set(opt.value, opt.label);
       setModal({
         title: ability.description,
         fields: [
           { key: "targetInstanceId", label: "Sojusznik", options: allies.map((u) => ({ value: u.instanceId, label: getCardDefinition(u.definitionId)?.name ?? u.definitionId })) },
-          { key: "targetSlotIndex", label: "Wolne miejsce", options: Array.from(freeSlots).map((i) => ({ value: String(i), label: `Miejsce ${i + 1}` })) },
+          { key: "targetZone", label: "Strefa docelowa", options: Array.from(allyZoneOptions, ([value, label]) => ({ value, label })) },
         ],
         onConfirm: (values) => {
-          sendAction({ type: "USE_ABILITY", matchPlayerId: myPlayerId, cardInstanceId: card.instanceId, abilityKey: ability.key, params: { targetInstanceId: values.targetInstanceId, targetSlotIndex: Number(values.targetSlotIndex) } });
+          sendAction({ type: "USE_ABILITY", matchPlayerId: myPlayerId, cardInstanceId: card.instanceId, abilityKey: ability.key, params: { targetInstanceId: values.targetInstanceId, targetZone: values.targetZone } });
           closeModal();
         },
       });

@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import type { CardInstance, GameAction, GameEvent, GameState } from "@dudacastle/shared";
-import { BARRACKS_DEFINITION, BATTLEFIELD_ZONES, MINE_DEFINITION, STRONGHOLD_DEFINITION, TOWER_DEFINITIONS } from "@dudacastle/shared";
+import { BARRACKS_DEFINITION, BATTLEFIELD_ZONES, MINE_DEFINITION, STRONGHOLD_DEFINITION } from "@dudacastle/shared";
 import type { CardCatalog } from "./catalog.js";
 import { getUnitDefinition } from "./catalog.js";
 import { GameRuleError } from "./errors.js";
@@ -10,6 +10,7 @@ import { resolveAttackAction, assertUnitReadyToAct, consumeStrongholdAction } fr
 import { recomputeAuras } from "./auras.js";
 import { processTurnEnd, processTurnStart } from "./turn-processing.js";
 import { cardsInZone, currentPlayer, getPlayer } from "./selectors.js";
+import { infrastructureMechanicsFor } from "./zones.js";
 import {
   assertDrawChoiceAvailable,
   assertFreeUnitSlot,
@@ -43,13 +44,6 @@ function hasBattlefieldAbility(state: GameState, catalog: CardCatalog, matchPlay
 export interface ApplyActionResult {
   state: GameState;
   events: GameEvent[];
-}
-
-function infrastructureMechanicsFor(kind: "tower" | "mine" | "barracks" | "stronghold") {
-  if (kind === "tower") return TOWER_DEFINITIONS[0].mechanics;
-  if (kind === "mine") return MINE_DEFINITION.mechanics;
-  if (kind === "barracks") return BARRACKS_DEFINITION.mechanics;
-  return STRONGHOLD_DEFINITION.mechanics;
 }
 
 function infrastructureDefinitionIdFor(kind: "mine" | "barracks" | "stronghold") {
