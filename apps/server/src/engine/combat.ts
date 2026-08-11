@@ -41,6 +41,18 @@ export function consumeStrongholdAction(state: GameState, catalog: CardCatalog, 
 }
 
 /**
+ * Koszary: jednostka gotowa do działania (po odczekaniu tury, zob. turn-processing.ts
+ * releaseGarrisonedUnits) wykonuje DOKŁADNIE 1 atak wybrany przez GRACZA (nie automatyczną
+ * heurystyką AI — wcześniej cel dobierał silnik za gracza), po czym natychmiast trafia na
+ * odrzucone. destroyUnit (nie moveToDiscard) — inaczej on_death (np. Przywołanie Emisariusza,
+ * gdyby dwaj Koszarowicze odeszli tą drogą w tej samej turze) po cichu by się nie uruchomił.
+ */
+export function consumeBarracksAction(state: GameState, catalog: CardCatalog, card: CardInstance, emit: Emit): void {
+  if (card.zone !== "barracks") return;
+  destroyUnit(state, catalog, card, emit);
+}
+
+/**
  * Czy jednostka o zdolności ofensywnej `attackerCanTarget` może trafić cel o kategorii
  * `targetCategory` — te dwa pola są NIEZALEŻNE (zob. UnitCardDefinition.targetCategory).
  * "land_and_air" po którejkolwiek stronie oznacza zawsze zgodność.
@@ -410,45 +422,6 @@ function resolveJointAttack(
   emit("JOINT_ATTACK_RESOLVED", { attackerInstanceIds, totalDamage, ability: jointAbility.key });
 }
 
-/**
- * Wybiera cel automatycznie (bez udziału gracza) — używane przez efekty wyzwalane przy starcie
- * tury, np. Cross Training w Koszarach. Preferuje przeciwnika z najsłabszym kompatybilnym celem;
- * jeśli przeciwnik nie ma żadnych jednostek (i nie jest chroniony Warownią), zwraca atak w jego
- * Królestwo.
- */
-function pickAutomaticTarget(state: GameState, catalog: CardCatalog, attacker: CardInstance): AttackTarget | null {
-  const attackerDef = getUnitDefinition(catalog, attacker.definitionId);
-  const effectiveCanTarget = attacker.zone === "tower" ? "land_and_air" : attackerDef.canTarget;
-  const opponents = state.players.filter((p) => p.matchPlayerId !== attacker.ownerMatchPlayerId && !p.eliminated);
-
-  for (const opponent of opponents) {
-    if (opponent.untargetableTurnsRemaining > 0) continue;
-    const attackable = attackableUnitsOf(state, catalog, opponent.matchPlayerId);
-    const compatible = attackable.filter((t) =>
-      canAttackerHitTargetCategory(effectiveCanTarget, getUnitDefinition(catalog, t.definitionId).targetCategory),
-    );
-    if (compatible.length > 0) {
-      const target = compatible.reduce((lowest, t) => (t.currentHp < lowest.currentHp ? t : lowest));
-      return { targetInstanceId: target.instanceId, targetPlayerId: opponent.matchPlayerId };
-    }
-    if (!hasAnyUnitAnywhere(state, catalog, opponent.matchPlayerId)) {
-      return { targetInstanceId: "kingdom", targetPlayerId: opponent.matchPlayerId };
-    }
-  }
-  return null;
-}
-
-/**
- * Atak automatyczny jednej jednostki (bez wyboru gracza) — Koszary/Cross Training. Zwraca true,
- * jeśli atak faktycznie się odbył (cel został znaleziony).
- */
-export function resolveAutomaticAttack(state: GameState, catalog: CardCatalog, attacker: CardInstance, emit: Emit): boolean {
-  const target = pickAutomaticTarget(state, catalog, attacker);
-  if (!target) return false;
-  resolveSingleAttack(state, catalog, attacker, target, emit);
-  return true;
-}
-
 export function resolveAttackAction(
   state: GameState,
   catalog: CardCatalog,
@@ -469,5 +442,8 @@ export function resolveAttackAction(
     resolveJointAttack(state, catalog, attackers, targets, emit);
   }
 
-  attackers.forEach((a) => consumeStrongholdAction(state, catalog, a));
+  attackers.forEach((a) => {
+    consumeStrongholdAction(state, catalog, a);
+    consumeBarracksAction(state, catalog, a, emit);
+  });
 }

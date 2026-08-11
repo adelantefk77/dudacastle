@@ -3,9 +3,8 @@ import { BATTLEFIELD_ZONES } from "@dudacastle/shared";
 import type { CardCatalog } from "./catalog.js";
 import { getInfrastructureDefinition, getUnitDefinition } from "./catalog.js";
 import { resolveEffect } from "./effect-resolver.js";
-import { resolveAutomaticAttack, destroyUnit } from "./combat.js";
+import { destroyUnit } from "./combat.js";
 import { cardsInZone, getPlayer } from "./selectors.js";
-import { moveToDiscard } from "./zones.js";
 
 type Emit = (type: string, payload?: Record<string, unknown>) => void;
 
@@ -93,32 +92,23 @@ function processIncome(state: GameState, catalog: CardCatalog, player: PlayerSta
  * Jadowitego Prysku Wyverna) — wymagałoby tymczasowego nadpisania zdolności między kartami.
  * Warownia: jednostka odzyskuje możliwość działania (2 akcje, inicjowane przez gracza).
  */
-function releaseGarrisonedUnits(state: GameState, catalog: CardCatalog, matchPlayerId: string, emit: Emit): void {
+function releaseGarrisonedUnits(state: GameState, catalog: CardCatalog, matchPlayerId: string): void {
+  // Koszary: jednostka po odczekaniu staje się gotowa i GRACZ (nie AI-heurystyka silnika) sam
+  // wybiera cel jej pojedynczego ataku przez zwykłą akcję ATTACK — zob. combat.ts
+  // consumeBarracksAction, które odrzuca ją natychmiast po tym ataku. Wcześniej ta faza
+  // rozstrzygała atak automatycznie, odbierając graczowi kontrolę nad celem.
   const barracksUnits = cardsInZone(state, matchPlayerId, "barracks").filter(
     (c) => catalog.get(c.definitionId)?.type === "unit" && c.status.readyToAct === false,
   );
   if (barracksUnits.length === 2) {
     const [a, b] = barracksUnits;
-    // Podwojenie ATK (Cross Training) — zjada się przy pierwszym ataku, jak Inicjatywa.
+    // Cross Training: obie jednocześnie gotowe -> podwojone ATK dla obu (jak Inicjatywa, zjada się przy pierwszym ataku).
     a.status.tempAtkBonus = (a.status.tempAtkBonus ?? 0) + a.currentAtk;
     b.status.tempAtkBonus = (b.status.tempAtkBonus ?? 0) + b.currentAtk;
-    // v3: OBIE karty najpierw atakują, DOPIERO POTEM trafiają na odrzucone RAZEM (jednocześnie —
-    // ma to znaczenie np. dla Przywołania Emisariusza En-šukud, które sprawdza parę odrzuconą
-    // "w tej samej turze"). Szał Bitewny Orka (retaliacja) mógł już przenieść atakującego na
-    // odrzucone wcześniej — stąd sprawdzenie strefy przed odrzuceniem, żeby nie zdublować.
-    resolveAutomaticAttack(state, catalog, a, emit);
-    resolveAutomaticAttack(state, catalog, b, emit);
-    // destroyUnit (nie moveToDiscard) — nawet rutynowe odesłanie z Koszar musi odpalić on_death
-    // celu (np. Przywołanie, jeśli obaj Emisariusze En-šukud trafią na odrzucone tą drogą razem).
-    // Nie "destroyedByOpponent": to nie jest zabicie przez przeciwnika, więc Feniks się tu NIE
-    // odradza — zgodnie z opisem karty ("po odrzuceniu PRZEZ PRZECIWNIKA").
-    if (a.zone === "barracks") destroyUnit(state, catalog, a, emit);
-    if (b.zone === "barracks") destroyUnit(state, catalog, b, emit);
-    emit("CROSS_TRAINING_TRIGGERED", { cardInstanceIds: [a.instanceId, b.instanceId] });
+    a.status.readyToAct = true;
+    b.status.readyToAct = true;
   } else if (barracksUnits.length === 1) {
-    const [solo] = barracksUnits;
-    resolveAutomaticAttack(state, catalog, solo, emit);
-    if (solo.zone === "barracks") destroyUnit(state, catalog, solo, emit);
+    barracksUnits[0].status.readyToAct = true;
   }
 
   for (const card of cardsInZone(state, matchPlayerId, "stronghold")) {
@@ -130,11 +120,21 @@ function releaseGarrisonedUnits(state: GameState, catalog: CardCatalog, matchPla
   }
 }
 
-/** Na koniec tury: jednostki z Warowni, które miały już swoje okno akcji, odchodzą na stos odrzuconych. */
-function dischargeSpentStrongholdUnits(state: GameState, catalog: CardCatalog, matchPlayerId: string): void {
+/**
+ * Na koniec tury: jednostki z Warowni/Koszar, które zdążyły stać się gotowe (dostały swoje okno
+ * akcji), odchodzą na stos odrzuconych — niezależnie, czy gracz faktycznie ich użył, żeby nie dało
+ * się trzymać ich tam bezterminowo jako darmowej, bezpiecznej blokady bezpośredniego ataku w zamek.
+ * destroyUnit (nie moveToDiscard), żeby on_death (Przywołanie Emisariusza itd.) poprawnie się
+ * uruchomiło nawet dla jednostki, która nigdy nie zaatakowała.
+ */
+function dischargeSpentStrongholdUnits(state: GameState, catalog: CardCatalog, matchPlayerId: string, emit: Emit): void {
   for (const card of cardsInZone(state, matchPlayerId, "stronghold")) {
     if (catalog.get(card.definitionId)?.type !== "unit") continue;
-    if (card.status.readyToAct === true) moveToDiscard(state, catalog, card);
+    if (card.status.readyToAct === true) destroyUnit(state, catalog, card, emit);
+  }
+  for (const card of cardsInZone(state, matchPlayerId, "barracks")) {
+    if (catalog.get(card.definitionId)?.type !== "unit") continue;
+    if (card.status.readyToAct === true) destroyUnit(state, catalog, card, emit);
   }
 }
 
@@ -221,7 +221,7 @@ export function processTurnStart(state: GameState, catalog: CardCatalog, matchPl
     }
   }
 
-  releaseGarrisonedUnits(state, catalog, matchPlayerId, emit);
+  releaseGarrisonedUnits(state, catalog, matchPlayerId);
 
   if (player.untargetableTurnsRemaining > 0) player.untargetableTurnsRemaining -= 1;
 
@@ -231,11 +231,11 @@ export function processTurnStart(state: GameState, catalog: CardCatalog, matchPl
 }
 
 /** Wywoływane raz na końcu tury gracza, którego tura się właśnie kończy. */
-export function processTurnEnd(state: GameState, catalog: CardCatalog, matchPlayerId: string): void {
+export function processTurnEnd(state: GameState, catalog: CardCatalog, matchPlayerId: string, emit: Emit): void {
   const player = getPlayer(state, matchPlayerId);
   player.doubleAtkUntilEndOfTurn = false;
 
-  dischargeSpentStrongholdUnits(state, catalog, matchPlayerId);
+  dischargeSpentStrongholdUnits(state, catalog, matchPlayerId, emit);
 
   // "Obrażenia nie przechodzą między turami" — jednostki, które przeżyły, odzyskują pełne HP.
   for (const card of Object.values(state.cards)) {

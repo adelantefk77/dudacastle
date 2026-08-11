@@ -485,7 +485,7 @@ function advanceToNextActivePlayer(state: GameState): void {
 
 function endTurn(state: GameState, catalog: CardCatalog, emit: (type: string, payload?: Record<string, unknown>) => void) {
   const endingPlayer = currentPlayer(state);
-  processTurnEnd(state, catalog, endingPlayer.matchPlayerId);
+  processTurnEnd(state, catalog, endingPlayer.matchPlayerId, emit);
 
   // Gracze pod efektem "pomiń swoją następną turę" (Zachodni Wiatr, Utknięcie w Grzęzawisku,
   // Przysługa dla Księcia, Wędrowna Trupa Artystyczna...) są przeskakiwani całkowicie —

@@ -81,7 +81,7 @@ export const BARRACKS_DEFINITION: InfrastructureCardDefinitionWithMechanics = {
   name: "Koszary",
   cost: 7,
   description:
-    "Maksymalnie dwie jednostki. Jednostki w Koszarach nie mogą działać do początku swojej następnej tury, po czym opuszczają Koszary, aktywują efekt Cross Training i trafiają na stos kart odrzuconych. Mogą być celem ataków.",
+    "Maksymalnie dwie jednostki. Jednostki w Koszarach nie mogą działać do początku swojej następnej tury, po czym mogą wykonać jeden wybrany przez Ciebie atak (Cross Training podwaja ATK, jeśli obie są gotowe naraz), po czym trafiają na stos kart odrzuconych. Mogą być celem ataków.",
   mechanics: {
     maxUnits: 2,
     delayTurns: 1,
