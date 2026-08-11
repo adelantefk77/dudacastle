@@ -62,20 +62,61 @@
   transform: translateY(-1px);
 }
 
+.game-screen__layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.game-screen__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.game-screen__sidebar {
+  flex: 0 0 280px;
+  width: 280px;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 900px) {
+  .game-screen__layout {
+    flex-direction: column;
+  }
+
+  .game-screen__sidebar {
+    position: static;
+    width: 100%;
+    max-height: none;
+  }
+}
+
 .game-screen__log {
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid #4a3b28;
   border-radius: 8px;
-  padding: 8px 12px;
-  margin-bottom: 16px;
+  padding: 10px 14px;
   font-size: 0.82rem;
   color: #d8c7a3;
-  max-height: 140px;
   overflow-y: auto;
+  flex: 1;
+  min-height: 200px;
+}
+
+.game-screen__log h4 {
+  margin: 0 0 8px;
+  color: #b9a98a;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .game-screen__log-entry {
-  padding: 3px 0;
+  padding: 4px 0;
   border-bottom: 1px dotted rgba(74, 59, 40, 0.6);
 }
 

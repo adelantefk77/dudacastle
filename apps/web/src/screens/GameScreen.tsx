@@ -120,18 +120,21 @@ function EventLog({ events, gameState }: EventLogProps) {
   const described = events
     .map((e) => ({ e, text: describeEvent(e, gameState) }))
     .filter((x): x is { e: GameEvent; text: string } => x.text !== null)
-    .slice(-8)
+    .slice(-25)
     .reverse();
-
-  if (described.length === 0) return null;
 
   return (
     <div className="game-screen__log">
-      {described.map(({ e, text }) => (
-        <div key={`${e.sequenceNo}-${e.type}`} className="game-screen__log-entry">
-          {text}
-        </div>
-      ))}
+      <h4>Dziennik zdarzeń</h4>
+      {described.length === 0 ? (
+        <span className="infra-zone__empty">Tu pojawią się ostatnie zdarzenia meczu.</span>
+      ) : (
+        described.map(({ e, text }) => (
+          <div key={`${e.sequenceNo}-${e.type}`} className="game-screen__log-entry">
+            {text}
+          </div>
+        ))
+      )}
     </div>
   );
 }
@@ -444,17 +447,17 @@ function GameBoard({
 
       {modal && <AbilityModal title={modal.title} description={modal.description} fields={modal.fields} onConfirm={modal.onConfirm} onCancel={closeModal} />}
 
-      <header className="game-screen__topbar">
-        <div>
-          Bank: {gameState.bankCoins}💰 — Tura #{gameState.turnNumber} — {isMyTurn ? "TWOJA TURA" : "Tura przeciwnika"} (
-          {gameState.turnPhase === "draw" ? "Dobór" : "Rozgrywanie"})
-        </div>
-        <button type="button" onClick={resetToLanding}>
-          Wyjdź
-        </button>
-      </header>
-
-      <EventLog events={recentEvents} gameState={gameState} />
+      <div className="game-screen__layout">
+        <div className="game-screen__main">
+          <header className="game-screen__topbar">
+            <div>
+              Bank: {gameState.bankCoins}💰 — Tura #{gameState.turnNumber} — {isMyTurn ? "TWOJA TURA" : "Tura przeciwnika"} (
+              {gameState.turnPhase === "draw" ? "Dobór" : "Rozgrywanie"})
+            </div>
+            <button type="button" onClick={resetToLanding}>
+              Wyjdź
+            </button>
+          </header>
 
       {gameState.status === "finished" && (
         <div className="game-screen__banner">
@@ -631,6 +634,12 @@ function GameBoard({
           onClearAttackers={() => setSelectedAttackers([])}
         />
       </section>
+        </div>
+
+        <aside className="game-screen__sidebar">
+          <EventLog events={recentEvents} gameState={gameState} />
+        </aside>
+      </div>
     </main>
   );
 }
