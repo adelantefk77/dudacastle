@@ -73,9 +73,14 @@ export function decideBotAction(state: GameState, matchPlayerId: string, catalog
   const player = getPlayer(state, matchPlayerId);
 
   if (state.turnPhase === "draw") {
-    return player.coins < UNIT_PURCHASE_COST
-      ? { type: "TAKE_COINS", matchPlayerId }
-      : { type: "DRAW_CARDS", matchPlayerId };
+    // Z pustą ręką TRZEBA dobrać — inaczej bot nigdy nie ma nic do zagrania. Bez tego warunku bot
+    // wpadał w martwą pętlę: gdy tylko monety osiągną 5, główna faza od razu je wydaje na BUY_UNIT
+    // (który idzie na stos odrzuconych, NIE na rękę), więc na starcie KOLEJNEJ tury `coins < 5` było
+    // zawsze prawdziwe i "DRAW_CARDS" nigdy się nie wybierało przez całą rozgrywkę.
+    const handIsEmpty = cardsInZone(state, matchPlayerId, "hand").length === 0;
+    return handIsEmpty || player.coins >= UNIT_PURCHASE_COST
+      ? { type: "DRAW_CARDS", matchPlayerId }
+      : { type: "TAKE_COINS", matchPlayerId };
   }
 
   const hand = cardsInZone(state, matchPlayerId, "hand");

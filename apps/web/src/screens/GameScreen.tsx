@@ -66,7 +66,7 @@ function describeEvent(event: GameEvent, gameState: GameState): string | null {
     case "UNIT_DESTROYED_IGNORING_HP":
       return `Zniszczono jednostkę (Jadowity Prysk): ${cardLabel(p.targetInstanceId)}.`;
     case "UNIT_BOUGHT":
-      return "Kupiono jednostkę z Talii Królestwa (w ciemno, trafia na stos odrzuconych).";
+      return `${playerLabel(event.actorMatchPlayerId)} kupił(a) z Talii Królestwa: ${cardLabel(p.cardInstanceId)} (trafia na stos odrzuconych).`;
     case "UNIT_PLAYED":
       return `Zagrano jednostkę: ${cardLabel(p.cardInstanceId)}.`;
     case "UNIT_PLACED_IN_INFRASTRUCTURE":
