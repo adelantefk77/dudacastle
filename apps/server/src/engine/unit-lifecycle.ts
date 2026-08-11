@@ -24,6 +24,7 @@ export function placeUnitBaseStats(
   card.slotIndex = slotIndex;
   card.status.enteredZoneOnTurn = state.turnNumber;
   card.status.hasAttacked = false;
+  card.status.destroyedOnTurn = undefined; // nowe-polecenia.pdf #5/#10 — zob. identyczny komentarz w reducer.ts PLAY_UNIT
   card.status.permanentHpBonus = (card.status.permanentHpBonus ?? 0) + extraHpBonus;
   card.currentHp = def.hp + card.status.permanentHpBonus;
   card.currentAtk = def.atk + (card.status.permanentAtkBonus ?? 0);

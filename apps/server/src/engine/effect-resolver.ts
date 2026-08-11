@@ -484,13 +484,16 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
     const partnerId = String(actionParams?.partnerInstanceId ?? "");
     const partner = state.cards[partnerId];
     // nowe-polecenia.pdf #6: dwa Krasnoludy łączą się w Katapultę niezależnie od tego, czy stoją
-    // w zwykłych slotach czy w Wieży/Kopalni/Koszarach (Warownia wykluczona — jej jednostka jest
-    // nietykalna i ma osobny licznik działań, więc merge w trakcie tego okna byłby niejednoznaczny).
+    // w zwykłych slotach czy w Wieży/Kopalni/Koszarach (Warownia wykluczona dla OBU stron — jej
+    // jednostka jest nietykalna i ma osobny licznik działań, więc merge w trakcie tego okna byłby
+    // niejednoznaczny; wcześniej ten zakaz obejmował tylko partnera, nie sourceCard).
+    const eligibleMergeZones = ["play_area", "tower", "mine", "barracks"];
     if (
       !partner ||
       partner.ownerMatchPlayerId !== ownerMatchPlayerId ||
       partner.instanceId === sourceCard.instanceId ||
-      !["play_area", "tower", "mine", "barracks"].includes(partner.zone)
+      !eligibleMergeZones.includes(partner.zone) ||
+      !eligibleMergeZones.includes(sourceCard.zone)
     ) {
       throw new GameRuleError("Nieprawidłowy partner do połączenia.", "INVALID_MERGE_PARTNER");
     }
@@ -502,10 +505,13 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
     const katapultaDef = getUnitDefinition(catalog, "unit-katapulta");
     moveToDiscard(state, catalog, partner);
     sourceCard.definitionId = "unit-katapulta";
-    // nowe-polecenia.pdf #6: jeśli sourceCard stoi w Wieży, jej permanentHpBonus (+2) musi zostać —
-    // nadpisanie samą bazową wartością Katapulty gubiłoby bonus Wieży.
-    sourceCard.currentHp = katapultaDef.hp + (sourceCard.status.permanentHpBonus ?? 0);
-    sourceCard.currentAtk = katapultaDef.atk + (sourceCard.status.permanentAtkBonus ?? 0);
+    // nowe-polecenia.pdf #6: jeśli sourceCard stoi w Wieży (permanentHpBonus) lub korzysta z aktywnej
+    // aury (Płatnerz/Śpiew Natury -> auraHpBonus/auraAtkBonus), oba muszą przetrwać — nadpisanie
+    // samą bazową wartością Katapulty by je zgubiło. recomputeAuras (wywoływane po każdej akcji)
+    // liczy różnicowo względem JUŻ zapisanego auraHpBonus/auraAtkBonus, więc ten bonus trzeba
+    // uwzględnić już tutaj, inaczej różnica wobec niezmienionego auraHpBonus wyszłaby na zero.
+    sourceCard.currentHp = katapultaDef.hp + (sourceCard.status.permanentHpBonus ?? 0) + (sourceCard.status.auraHpBonus ?? 0);
+    sourceCard.currentAtk = katapultaDef.atk + (sourceCard.status.permanentAtkBonus ?? 0) + (sourceCard.status.auraAtkBonus ?? 0);
     sourceCard.status.isKrasnoludMerge = true;
     emit("KRASNOLUD_MERGED_INTO_KATAPULTA", { cardInstanceId: sourceCard.instanceId, discardedPartnerId: partner.instanceId });
   },

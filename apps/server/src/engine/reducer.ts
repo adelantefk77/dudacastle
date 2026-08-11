@@ -141,6 +141,10 @@ export function applyAction(prevState: GameState, action: GameAction, catalog: C
 
       card.status.enteredZoneOnTurn = state.turnNumber;
       card.status.hasAttacked = false;
+      // nowe-polecenia.pdf #5/#10: moveToDiscard czyści status przy WYJŚCIU z planszy, ale
+      // destroyUnit zaraz potem doczepia destroyedOnTurn (potrzebne przez on_death w tym samym
+      // momencie) — bez tej linii ta jedna wartość przetrwałaby aż do kolejnego zagrania karty.
+      card.status.destroyedOnTurn = undefined;
       card.currentHp = definition.hp + (card.status.permanentHpBonus ?? 0);
       card.currentAtk = definition.atk + (card.status.permanentAtkBonus ?? 0);
 
@@ -293,6 +297,7 @@ export function applyAction(prevState: GameState, action: GameAction, catalog: C
       card.slotIndex = occupantCount;
       card.status.enteredZoneOnTurn = state.turnNumber;
       card.status.hasAttacked = false;
+      card.status.destroyedOnTurn = undefined; // nowe-polecenia.pdf #5/#10 — zob. identyczny komentarz w PLAY_UNIT
       // Bonus HP z Wieży musi wejść do permanentHpBonus (nie tylko do bieżącego currentHp) —
       // inaczej znika po pierwszym resecie HP na koniec tury ("obrażenia nie przechodzą między
       // turami" w turn-processing.ts liczy currentHp na nowo z def.hp + permanentHpBonus, nie
