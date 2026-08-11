@@ -70,9 +70,12 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
   },
 
   // Wzmocnienie (Faun, Druid, Feniks, Mag, Elf Świetlisty) — jednorazowy przyrost na start tury, nie aura ciągła.
-  buffOwnUnitsHp: ({ state, catalog, ownerMatchPlayerId, params }) => {
+  buffOwnUnitsHp: ({ state, catalog, sourceCard, ownerMatchPlayerId, params }) => {
     const amount = Number(params?.amount ?? 1);
+    // nowe-polecenia.pdf #1/#3: wzmacnia wszystkie POZOSTAŁE jednostki właściciela, nigdy siebie —
+    // wcześniej jednostka z Wzmocnieniem błędnie liczyła się we własnym gronie celów.
     for (const unit of battlefieldUnitsOf(state, catalog, ownerMatchPlayerId)) {
+      if (unit.instanceId === sourceCard.instanceId) continue;
       unit.status.permanentHpBonus = (unit.status.permanentHpBonus ?? 0) + amount;
       unit.currentHp += amount;
     }
@@ -480,7 +483,15 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
   mergeIntoKatapulta: ({ state, catalog, sourceCard, ownerMatchPlayerId, actionParams, emit }) => {
     const partnerId = String(actionParams?.partnerInstanceId ?? "");
     const partner = state.cards[partnerId];
-    if (!partner || partner.ownerMatchPlayerId !== ownerMatchPlayerId || partner.zone !== "play_area" || partner.instanceId === sourceCard.instanceId) {
+    // nowe-polecenia.pdf #6: dwa Krasnoludy łączą się w Katapultę niezależnie od tego, czy stoją
+    // w zwykłych slotach czy w Wieży/Kopalni/Koszarach (Warownia wykluczona — jej jednostka jest
+    // nietykalna i ma osobny licznik działań, więc merge w trakcie tego okna byłby niejednoznaczny).
+    if (
+      !partner ||
+      partner.ownerMatchPlayerId !== ownerMatchPlayerId ||
+      partner.instanceId === sourceCard.instanceId ||
+      !["play_area", "tower", "mine", "barracks"].includes(partner.zone)
+    ) {
       throw new GameRuleError("Nieprawidłowy partner do połączenia.", "INVALID_MERGE_PARTNER");
     }
     const partnerDef = getUnitDefinition(catalog, partner.definitionId);
@@ -491,8 +502,10 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
     const katapultaDef = getUnitDefinition(catalog, "unit-katapulta");
     moveToDiscard(state, catalog, partner);
     sourceCard.definitionId = "unit-katapulta";
-    sourceCard.currentHp = katapultaDef.hp;
-    sourceCard.currentAtk = katapultaDef.atk;
+    // nowe-polecenia.pdf #6: jeśli sourceCard stoi w Wieży, jej permanentHpBonus (+2) musi zostać —
+    // nadpisanie samą bazową wartością Katapulty gubiłoby bonus Wieży.
+    sourceCard.currentHp = katapultaDef.hp + (sourceCard.status.permanentHpBonus ?? 0);
+    sourceCard.currentAtk = katapultaDef.atk + (sourceCard.status.permanentAtkBonus ?? 0);
     sourceCard.status.isKrasnoludMerge = true;
     emit("KRASNOLUD_MERGED_INTO_KATAPULTA", { cardInstanceId: sourceCard.instanceId, discardedPartnerId: partner.instanceId });
   },

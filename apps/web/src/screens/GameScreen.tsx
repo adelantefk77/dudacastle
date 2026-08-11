@@ -426,6 +426,29 @@ function GameBoard({
       return;
     }
 
+    if (ability.effectKey === "mergeIntoKatapulta") {
+      // Partner może stać w dowolnej strefie (play_area/Wieża/Kopalnia/Koszary), nie tylko obok
+      // siebie w obszarze gry — zob. relocateZoneOptions i identyczne uzasadnienie w effect-resolver.ts.
+      const candidates = [...myPlayArea, ...myTowerUnits, ...myMineUnits, ...myBarracksUnits].filter(
+        (u) => u.instanceId !== card.instanceId && getCardDefinition(u.definitionId)?.name === "Krasnolud",
+      );
+      setModal({
+        title: ability.description,
+        fields: [
+          {
+            key: "partnerInstanceId",
+            label: "Drugi Krasnolud",
+            options: candidates.map((u) => ({ value: u.instanceId, label: `${getCardDefinition(u.definitionId)?.name} (${u.zone})` })),
+          },
+        ],
+        onConfirm: (values) => {
+          sendAction({ type: "USE_ABILITY", matchPlayerId: myPlayerId, cardInstanceId: card.instanceId, abilityKey: ability.key, params: { partnerInstanceId: values.partnerInstanceId } });
+          closeModal();
+        },
+      });
+      return;
+    }
+
     if (ability.effectKey === "swapTwoOwnUnitsOncePerTurn") {
       setModal({
         title: ability.description,

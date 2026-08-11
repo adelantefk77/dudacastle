@@ -90,13 +90,19 @@ export function relocateUnitToZone(
  * trwałego połączenia 2 Krasnoludów, zob. effect-resolver.ts "mergeIntoKatapulta") przy
  * odrzuceniu musi wrócić jako DWIE karty Krasnoluda, nie jedna karta Katapulty — to jedyne
  * miejsce, przez które przechodzą wszystkie odrzucenia jednostek, więc reguła jest tu scentralizowana.
+ *
+ * nowe-polecenia.pdf #5/#10: zniszczona karta po ponownym zagraniu NIE może dziedziczyć żadnych
+ * modyfikatorów z poprzedniego pobytu na planszy (permanentHpBonus z Wieży/Wzmocnienia, aury,
+ * flagi Szarży itd.) — ta sama instancja karty krąży: discard -> talia startowa (przetasowanie)
+ * -> ręka -> plansza, więc bez czyszczenia całego `status` te bonusy "wyciekałyby" i kumulowały
+ * się przy każdym kolejnym zagraniu tej samej karty. `destroyUnit` ustawia `destroyedOnTurn`
+ * DOPIERO PO tym wywołaniu (potrzebne przez on_death sprawdzające "zginął w tej samej turze").
  */
 export function moveToDiscard(state: GameState, catalog: CardCatalog, card: CardInstance): void {
   const wasKrasnoludMerge = card.status.isKrasnoludMerge === true;
   card.zone = "discard";
   card.slotIndex = null;
-  card.status.stackedOnInstanceId = undefined;
-  card.status.isKrasnoludMerge = undefined;
+  card.status = {};
 
   if (wasKrasnoludMerge) {
     const owner = getPlayer(state, card.ownerMatchPlayerId);

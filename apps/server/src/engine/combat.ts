@@ -152,8 +152,10 @@ export function destroyUnit(
   actionParams?: Record<string, unknown>,
 ): void {
   const def = getUnitDefinition(catalog, targetCard.definitionId);
-  targetCard.status.destroyedOnTurn = state.turnNumber;
+  // moveToDiscard czyści CAŁY status (nowe-polecenia.pdf #5/#10) — destroyedOnTurn musi być
+  // ustawione PO tym wywołaniu, inaczej zostałoby natychmiast wyzerowane razem z resztą.
   moveToDiscard(state, catalog, targetCard);
+  targetCard.status.destroyedOnTurn = state.turnNumber;
   emit("UNIT_DESTROYED", { cardInstanceId: targetCard.instanceId });
   for (const ability of def.abilities) {
     if (ability.trigger === "on_death") {
@@ -222,15 +224,20 @@ function applyDamageToTarget(
   const targetOwner = getPlayer(state, targetCard.ownerMatchPlayerId);
   assertUnitTargetable(targetCard, targetOwner);
 
+  // Zasada "wszystko albo nic" (nowe-polecenia.pdf #2/#9): jednostki nie mają trwałego stanu
+  // częściowych obrażeń — atak ALBO niszczy cel (ATK >= HP), ALBO nie zostawia żadnego śladu
+  // (ATK < HP, HP celu w ogóle się nie zmienia). Wcześniej `currentHp -= damage` zostawiało
+  // jednostkę "podranioną" aż do resetu HP na koniec tury WŁAŚCICIELA celu — co w grze 2+ graczy
+  // mogło oznaczać całe rundy innych graczy zanim właściciel w ogóle skończył swoją turę.
   const damage = Number(alloc.damage ?? 0);
-  targetCard.currentHp -= damage;
+  const destroyed = damage >= targetCard.currentHp;
   emit("ATTACK_RESOLVED", {
     attackerInstanceIds,
     targetInstanceId: targetCard.instanceId,
     damage,
-    targetRemainingHp: targetCard.currentHp,
+    targetRemainingHp: destroyed ? 0 : targetCard.currentHp,
   });
-  if (targetCard.currentHp <= 0) {
+  if (destroyed) {
     destroyUnit(state, catalog, targetCard, emit, { attackerInstanceIds, destroyedByOpponent: true });
   }
 }
@@ -314,18 +321,18 @@ function resolveSingleAttack(
     throw new GameRuleError(`Ta jednostka nie może atakować celów typu "${label}".`, "INVALID_TARGET_DOMAIN");
   }
 
+  // "Wszystko albo nic" (nowe-polecenia.pdf #2/#9) — zob. identyczny komentarz w applyDamageToTarget.
   const damage = effectiveAttackDamage(state, attacker);
-  targetCard.currentHp -= damage;
+  const destroyed = damage >= targetCard.currentHp;
   attacker.status.hasAttacked = true;
   attacker.status.tempAtkBonus = 0; // "Inicjatywa" konsumowana po pierwszym ataku
   emit("ATTACK_RESOLVED", {
     attackerInstanceIds: [attacker.instanceId],
     targetInstanceId: targetCard.instanceId,
     damage,
-    targetRemainingHp: targetCard.currentHp,
+    targetRemainingHp: destroyed ? 0 : targetCard.currentHp,
   });
 
-  const destroyed = targetCard.currentHp <= 0;
   if (destroyed) destroyUnit(state, catalog, targetCard, emit, { attackerInstanceIds: [attacker.instanceId], destroyedByOpponent: true });
   handleChargeFollowUp(state, catalog, attacker, attackerDef, destroyed, emit);
 }
