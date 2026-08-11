@@ -62,12 +62,19 @@ function describeEvent(event: GameEvent, gameState: GameState): string | null {
     case "KINGDOM_ATTACKED_DIRECTLY":
       return `Atak bezpośrednio w Królestwo (${playerLabel(p.targetPlayerId)}) — ${p.damage} obrażeń.`;
     case "UNIT_DESTROYED":
-    case "UNIT_DESTROYED_IGNORING_HP":
       return `Zniszczono jednostkę: ${cardLabel(p.cardInstanceId)}.`;
+    case "UNIT_DESTROYED_IGNORING_HP":
+      return `Zniszczono jednostkę (Jadowity Prysk): ${cardLabel(p.targetInstanceId)}.`;
     case "UNIT_BOUGHT":
       return "Kupiono jednostkę z Talii Królestwa (w ciemno, trafia na stos odrzuconych).";
+    case "UNIT_PLAYED":
+      return `Zagrano jednostkę: ${cardLabel(p.cardInstanceId)}.`;
+    case "UNIT_PLACED_IN_INFRASTRUCTURE":
+      return `Umieszczono jednostkę „${cardLabel(p.cardInstanceId)}" w infrastrukturze (${p.infrastructure}).`;
     case "INFRASTRUCTURE_BOUGHT":
       return `Kupiono infrastrukturę: ${p.kind}.`;
+    case "INFRASTRUCTURE_GRANTED":
+      return `Otrzymano kartę infrastruktury: ${p.kind}.`;
     case "INFRASTRUCTURE_POOL_EXHAUSTED":
       return "Brak dostępnej infrastruktury tego typu we wspólnej puli.";
     case "PLAYER_ELIMINATED":
@@ -84,10 +91,18 @@ function describeEvent(event: GameEvent, gameState: GameState): string | null {
       return `${playerLabel(p.matchPlayerId)} pomija turę.`;
     case "CHARGE_BONUS_ATTACK_AVAILABLE":
       return "Szarża: dostępny dodatkowy atak.";
+    case "CHARGE_BONUS_ATTACK_CONSUMED":
+      return "Szarża: wykorzystano dodatkowy atak.";
     case "CROSS_TRAINING_TRIGGERED":
       return "Koszary: Cross Training — automatyczny atak z podwojonym ATK.";
     case "KRASNOLUD_MERGED_INTO_KATAPULTA":
       return "Dwa Krasnoludy połączone w Katapultę.";
+    case "ABILITY_USED":
+      return `Użyto zdolności: ${cardLabel(p.cardInstanceId)}.`;
+    case "PLAGUE_RESOLVED":
+      return `Zaraźliwa Plaga: odrzucono ${p.discarded} jednostek(i) u ${playerLabel(p.matchPlayerId)}.`;
+    case "GORANOWE_SZCZESCIE_RESOLVED":
+      return `Goranowe Szczęście: ${playerLabel(p.forcedMatchPlayerId)} dobrał(a) wymuszoną kartę Wydarzenia.`;
     default:
       return null; // przefiltrowywane niżej
   }

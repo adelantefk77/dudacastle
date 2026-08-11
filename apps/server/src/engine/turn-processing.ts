@@ -3,7 +3,7 @@ import { BATTLEFIELD_ZONES } from "@dudacastle/shared";
 import type { CardCatalog } from "./catalog.js";
 import { getInfrastructureDefinition, getUnitDefinition } from "./catalog.js";
 import { resolveEffect } from "./effect-resolver.js";
-import { resolveAutomaticAttack } from "./combat.js";
+import { resolveAutomaticAttack, destroyUnit } from "./combat.js";
 import { cardsInZone, getPlayer } from "./selectors.js";
 import { moveToDiscard } from "./zones.js";
 
@@ -108,19 +108,17 @@ function releaseGarrisonedUnits(state: GameState, catalog: CardCatalog, matchPla
     // odrzucone wcześniej — stąd sprawdzenie strefy przed odrzuceniem, żeby nie zdublować.
     resolveAutomaticAttack(state, catalog, a, emit);
     resolveAutomaticAttack(state, catalog, b, emit);
-    if (a.zone === "barracks") {
-      a.status.destroyedOnTurn = state.turnNumber;
-      moveToDiscard(state, catalog, a);
-    }
-    if (b.zone === "barracks") {
-      b.status.destroyedOnTurn = state.turnNumber;
-      moveToDiscard(state, catalog, b);
-    }
+    // destroyUnit (nie moveToDiscard) — nawet rutynowe odesłanie z Koszar musi odpalić on_death
+    // celu (np. Przywołanie, jeśli obaj Emisariusze En-šukud trafią na odrzucone tą drogą razem).
+    // Nie "destroyedByOpponent": to nie jest zabicie przez przeciwnika, więc Feniks się tu NIE
+    // odradza — zgodnie z opisem karty ("po odrzuceniu PRZEZ PRZECIWNIKA").
+    if (a.zone === "barracks") destroyUnit(state, catalog, a, emit);
+    if (b.zone === "barracks") destroyUnit(state, catalog, b, emit);
     emit("CROSS_TRAINING_TRIGGERED", { cardInstanceIds: [a.instanceId, b.instanceId] });
   } else if (barracksUnits.length === 1) {
     const [solo] = barracksUnits;
     resolveAutomaticAttack(state, catalog, solo, emit);
-    if (solo.zone === "barracks") moveToDiscard(state, catalog, solo);
+    if (solo.zone === "barracks") destroyUnit(state, catalog, solo, emit);
   }
 
   for (const card of cardsInZone(state, matchPlayerId, "stronghold")) {
@@ -193,6 +191,12 @@ export function processTurnStart(state: GameState, catalog: CardCatalog, matchPl
   // Kopalnia NIE daje prawa do ataku, ale jednostka tam wciąż "żyje w grze" — jej pasywne
   // zdolności on_turn_start (Uzdrowienie, Zręczność, Wzmocnienie...) nadal działają (v3: zob.
   // simulator_v3.py start_turn_income(), które liczy board+tower+mine, nie tylko board+tower).
+  //
+  // Zręczność/Uzdrowienie mają się odpalić RAZ NA KAŻDĄ kartę, która je niesie (dwóch uzdrowicieli
+  // leczy podwójnie) — ale Siostrzana Przysięga Amazonki to próg "masz 2 Amazonki" dla CAŁEJ armii,
+  // nie bonus per-kopia: bez deduplikacji 2 Amazonki odpalały ten sam efekt (podejrzyj 3 karty
+  // talii startowej, zagraj/odrzuć) dwa razy na start tury zamiast raz.
+  const thresholdEffectsFiredThisCall = new Set<string>();
   for (const card of [
     ...cardsInZone(state, matchPlayerId, "play_area"),
     ...cardsInZone(state, matchPlayerId, "tower"),
@@ -201,16 +205,19 @@ export function processTurnStart(state: GameState, catalog: CardCatalog, matchPl
     if (catalog.get(card.definitionId)?.type !== "unit") continue;
     const def = getUnitDefinition(catalog, card.definitionId);
     for (const ability of def.abilities) {
-      if (ability.trigger === "on_turn_start") {
-        resolveEffect(ability.effectKey, {
-          state,
-          catalog,
-          sourceCard: card,
-          ownerMatchPlayerId: matchPlayerId,
-          params: ability.params,
-          emit,
-        });
+      if (ability.trigger !== "on_turn_start") continue;
+      if (ability.effectKey === "amazonSisterlyOath") {
+        if (thresholdEffectsFiredThisCall.has(ability.effectKey)) continue;
+        thresholdEffectsFiredThisCall.add(ability.effectKey);
       }
+      resolveEffect(ability.effectKey, {
+        state,
+        catalog,
+        sourceCard: card,
+        ownerMatchPlayerId: matchPlayerId,
+        params: ability.params,
+        emit,
+      });
     }
   }
 

@@ -124,8 +124,15 @@ function requireOwnedActingCard(state: GameState, matchPlayerId: string, instanc
   return card;
 }
 
-/** Rozstrzyga (na miejscu, mutując `state`) skutki trafienia jednego celu i ewentualną śmierć jednostki-celu. */
-function destroyUnit(
+/**
+ * Rozstrzyga (na miejscu, mutując `state`) skutki trafienia jednego celu i ewentualną śmierć
+ * jednostki-celu. Eksportowane — to JEDYNA droga niszczenia karty, która poprawnie odpala jej
+ * zdolności on_death (Powstanie z Popiołów Feniksa, Przywołanie Emisariusza...); inne miejsca w
+ * silniku, które chcą zniszczyć kartę (Zasadzka Banitów, Szał Bitewny Orka, Cross Training w
+ * Koszarach), MUSZĄ wywoływać tę funkcję zamiast `moveToDiscard` bezpośrednio, inaczej on_death
+ * po cichu się nie uruchomi.
+ */
+export function destroyUnit(
   state: GameState,
   catalog: CardCatalog,
   targetCard: CardInstance,

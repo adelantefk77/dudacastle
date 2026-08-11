@@ -5,13 +5,27 @@ import type { CardCatalog } from "./catalog.js";
 import { getUnitDefinition } from "./catalog.js";
 import { drawFromStartingDeck } from "./deck-utils.js";
 import { GameRuleError } from "./errors.js";
-import { cardsInZone, getPlayer } from "./selectors.js";
+import { cardsInZone, getPlayer, unitSlotCapacity } from "./selectors.js";
 import { drawAndPlaceFromStartingDeck, placeUnitBaseStats } from "./unit-lifecycle.js";
 import { findFreeSlotIndex, moveToDiscard, moveToHand } from "./zones.js";
+// Import cykliczny z combat.ts (które importuje stąd `resolveEffect`) — bezpieczny, bo obie strony
+// używają importowanych funkcji WYŁĄCZNIE wewnątrz ciał innych funkcji, nigdy na poziomie modułu.
+import { destroyUnit } from "./combat.js";
 
 /** Heurystyka "jak dobra jest ta karta" — zob. cards.py priority_score (uproszczona: bez bonusów per-zdolność). */
 function unitValueHeuristic(def: { atk: number; hp: number }): number {
   return def.atk * 1.5 + def.hp * 0.5;
+}
+
+/**
+ * Klient nie jest zaufany co do `targetSlotIndex` (Harpii Zryw, Powietrzny Transport, Zamieszanie)
+ * — bez tej walidacji `Number(undefined)` (NaN) albo poza-zakresowy indeks przechodziłby
+ * sprawdzenie zajętości (żadna karta nigdy nie ma `slotIndex === NaN`) i zapisywałby nielegalny slot.
+ */
+function assertValidPlayAreaSlot(state: GameState, matchPlayerId: string, targetSlot: number): void {
+  if (!Number.isInteger(targetSlot) || targetSlot < 0 || targetSlot >= unitSlotCapacity(state, matchPlayerId)) {
+    throw new GameRuleError("Nieprawidłowe miejsce docelowe.", "INVALID_SLOT_INDEX");
+  }
 }
 
 export interface EffectContext {
@@ -81,12 +95,14 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
   },
 
   // Szał Bitewny (Ork, on_death) — zabija atakującego (przy ataku łączonym: tego o niższym HP).
-  retaliateKillAttacker: ({ state, catalog, actionParams }) => {
+  retaliateKillAttacker: ({ state, catalog, emit, actionParams }) => {
     const attackerIds = (actionParams?.attackerInstanceIds as string[] | undefined) ?? [];
     const attackers = attackerIds.map((id) => state.cards[id]).filter((c): c is CardInstance => !!c);
     if (attackers.length === 0) return;
     const target = attackers.reduce((lowest, c) => (c.currentHp < lowest.currentHp ? c : lowest));
-    moveToDiscard(state, catalog, target);
+    // destroyUnit (nie moveToDiscard) — jednostka zabita retaliacją wciąż powinna odpalić swoje
+    // on_death (np. Przywołanie Emisariusza, gdyby dwóch zginęło tą drogą w tej samej turze).
+    destroyUnit(state, catalog, target, emit, { destroyedByOpponent: true });
   },
 
   // Szarża (Elf Mroczny, Minotaur, Centaur — on_enemy_destroyed): drugi atak natychmiast, potem odrzucona.
@@ -132,6 +148,7 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
   // Harpii Zryw / Galop (activated) — przenosi tę jednostkę na wskazane wolne miejsce.
   relocateSelf: ({ state, sourceCard, ownerMatchPlayerId, actionParams }) => {
     const targetSlot = Number(actionParams?.targetSlotIndex);
+    assertValidPlayAreaSlot(state, ownerMatchPlayerId, targetSlot);
     const occupied = cardsInZone(state, ownerMatchPlayerId, "play_area").some(
       (c) => c.slotIndex === targetSlot && c.instanceId !== sourceCard.instanceId,
     );
@@ -148,6 +165,7 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
     if (!ally || ally.ownerMatchPlayerId !== ownerMatchPlayerId || ally.zone !== "play_area") {
       throw new GameRuleError("Nieprawidłowa sojusznicza jednostka do przeniesienia.", "INVALID_ALLY_TARGET");
     }
+    assertValidPlayAreaSlot(state, ownerMatchPlayerId, targetSlot);
     const occupied = cardsInZone(state, ownerMatchPlayerId, "play_area").some(
       (c) => c.slotIndex === targetSlot && c.instanceId !== ally.instanceId,
     );
@@ -308,7 +326,10 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
     for (let hop = 0; hop < state.players.length; hop++) {
       const units = battlefieldUnitsOf(state, catalog, currentOwner);
       if (units.length > 0) {
-        units.slice(0, amount).forEach((u) => moveToDiscard(state, catalog, u));
+        // destroyUnit, nie moveToDiscard — inne on_death (np. Przywołanie Emisariusza) muszą
+        // zadziałać nawet przy wymuszonym odrzuceniu własnych jednostek (Feniks NIE odradza się
+        // tutaj — to nie zniszczenie "przez przeciwnika", zgodnie z opisem jego karty).
+        units.slice(0, amount).forEach((u) => destroyUnit(state, catalog, u, emit));
         emit("PLAGUE_RESOLVED", { matchPlayerId: currentOwner, discarded: Math.min(amount, units.length) });
         return;
       }
@@ -320,7 +341,7 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
   // zwykłych atakach; "chyba że efekt karty stanowi inaczej" tu nie ma zastosowania). Bez filtru
   // typu "unit" kandydatami byłyby też same karty infrastruktury (currentHp=0), więc zawsze
   // wygrywałyby porównanie najniższego HP zamiast realnej, słabej jednostki.
-  destroyLowestHpEnemyInInfrastructure: ({ state, catalog, actionParams }) => {
+  destroyLowestHpEnemyInInfrastructure: ({ state, catalog, emit, actionParams }) => {
     const targetPlayerId = String(actionParams?.targetPlayerId ?? "");
     const infraZones: CardInstance["zone"][] = ["tower", "mine", "barracks"];
     const candidates = Object.values(state.cards).filter(
@@ -328,7 +349,9 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
     );
     if (candidates.length === 0) return;
     const lowest = candidates.reduce((min, c) => (c.currentHp < min.currentHp ? c : min));
-    moveToDiscard(state, catalog, lowest);
+    // Musi iść przez destroyUnit (nie moveToDiscard bezpośrednio), inaczej on_death celu
+    // (Powstanie z Popiołów Feniksa, Przywołanie Emisariusza...) po cichu się nie uruchomi.
+    destroyUnit(state, catalog, lowest, emit, { destroyedByOpponent: true });
   },
 
   // Utknięcie w Grzęzawisku
@@ -357,6 +380,7 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
     if (!card || card.ownerMatchPlayerId !== ownerMatchPlayerId || card.zone !== "play_area") {
       throw new GameRuleError("Nieprawidłowa jednostka do przeniesienia.", "INVALID_RELOCATE_TARGET");
     }
+    assertValidPlayAreaSlot(state, ownerMatchPlayerId, targetSlot);
     const occupied = cardsInZone(state, ownerMatchPlayerId, "play_area").some(
       (c) => c.slotIndex === targetSlot && c.instanceId !== card.instanceId,
     );
