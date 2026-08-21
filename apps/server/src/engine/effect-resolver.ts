@@ -577,11 +577,13 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
 
   // Przywołanie (Munmaa, on_death) — v4: jeśli Munmaa zostanie odrzucona (z JAKIEGOKOLWIEK
   // powodu, bez wymogu pary), odzyskaj JEDNĄ LOSOWĄ kartę ze stosu odrzuconych do ręki, następnie
-  // odrzuć najsłabszą kartę z ręki (zob. simulator_v3 (1) 2.py try_munmaa_summon).
-  recycleRandomFromDiscardOnOwnDeath: ({ state, catalog, sourceCard, ownerMatchPlayerId }) => {
-    const discard = cardsInZone(state, ownerMatchPlayerId, "discard").filter(
-      (c) => c.instanceId !== sourceCard.instanceId,
-    );
+  // odrzuć najsłabszą kartę z ręki (zob. simulator_v3 (1) 2.py try_munmaa_summon). Munmaa TRAFIA
+  // do stosu odrzuconych PRZED wywołaniem tego efektu (destroyUnit najpierw woła moveToDiscard) —
+  // reference (`_discard_name` → `try_munmaa_summon`) losuje z CAŁEGO stosu WŁĄCZNIE z nią, więc
+  // Munmaa może (z niskim prawdopodobieństwem) "odzyskać samą siebie" — celowo NIE wykluczamy jej
+  // (Codex audit: wcześniejsze wykluczenie rozjeżdżało się z referencyjnym prawdopodobieństwem).
+  recycleRandomFromDiscardOnOwnDeath: ({ state, catalog, ownerMatchPlayerId }) => {
+    const discard = cardsInZone(state, ownerMatchPlayerId, "discard");
     if (discard.length === 0) return;
     const recovered = discard[Math.floor(Math.random() * discard.length)];
     moveToHand(recovered);

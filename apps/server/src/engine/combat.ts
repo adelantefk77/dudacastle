@@ -173,7 +173,12 @@ export function destroyUnit(
       });
     }
   }
-  if (hadOneShotSzalBitewny) {
+  // Codex audit: jeśli karta ma już WŁASNY, prawdziwy Szał Bitewny (np. Ork), powyższa pętla
+  // już go odpaliła — nie powielaj efektu (podwójne zniszczenie/wybór atakującego).
+  const alreadyHasRealSzalBitewny = def.abilities.some(
+    (a) => a.trigger === "on_death" && a.effectKey === "retaliateKillAttacker",
+  );
+  if (hadOneShotSzalBitewny && !alreadyHasRealSzalBitewny) {
     resolveEffect("retaliateKillAttacker", {
       state,
       catalog,

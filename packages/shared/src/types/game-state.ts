@@ -48,6 +48,12 @@ export interface StatusFlags {
   isLucznikMerge?: boolean;
   /** Trening z Gráfeldr'em: jednorazowo użyczony Szał Bitewny — sprawdzane i konsumowane w combat.ts destroyUnit PRZED wyczyszczeniem status przez moveToDiscard. */
   oneShotSzalBitewnyPending?: boolean;
+  /**
+   * Ile z `permanentHpBonus` pochodzi obecnie z bycia w Wieży (0, jeśli karta nie jest w Wieży) —
+   * pozwala relocateUnitToZone (zones.ts) poprawnie ODJĄĆ ten bonus przy opuszczeniu Wieży zamiast
+   * zostawiać go tam na zawsze (i uniknąć podwójnego naliczenia przy Wieża→gdzie indziej→Wieża).
+   */
+  towerHpBonusApplied?: number;
 }
 
 export interface CardInstance {

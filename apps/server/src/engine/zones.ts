@@ -42,6 +42,15 @@ export function relocateUnitToZone(
   targetZone: Zone,
 ): void {
   const definition = getUnitDefinition(catalog, card.definitionId);
+  // Odejmij POPRZEDNIO naliczony bonus Wieży (jeśli karta stała w Wieży) — inaczej opuszczenie
+  // Wieży zostawiałoby ten bonus na stałe, a powrót do Wieży naliczałby go PONOWNIE, kumulując się
+  // w nieskończoność (Codex audit — dotyczy Harpii Zrywu/Galopu/Powietrznego Transportu/Zamieszania,
+  // czyli każdego wywołania tej funkcji, nie tylko nowego Galopu Centaura).
+  const prevTowerBonus = card.status.towerHpBonusApplied ?? 0;
+  if (prevTowerBonus !== 0) {
+    card.status.permanentHpBonus = (card.status.permanentHpBonus ?? 0) - prevTowerBonus;
+    card.status.towerHpBonusApplied = 0;
+  }
 
   if (targetZone === "play_area") {
     const slotIndex = findFreeSlotIndex(state, matchPlayerId);
@@ -49,6 +58,10 @@ export function relocateUnitToZone(
     card.zone = "play_area";
     card.slotIndex = slotIndex;
     card.status.readyToAct = true;
+    // Zachowaj aktywny bonus aury (Wzmocnienie/Cearta) — nadpisanie samym def.hp+permanentHpBonus
+    // by go zgubiło do najbliższego recomputeAuras (ta sama klasa błędu naprawiona wcześniej przy
+    // mergeIntoKatapulta, tu przeoczona dla zwykłego przenoszenia jednostek).
+    card.currentHp = definition.hp + (card.status.permanentHpBonus ?? 0) + (card.status.auraHpBonus ?? 0);
     return;
   }
 
@@ -75,7 +88,8 @@ export function relocateUnitToZone(
 
   const towerHpBonus = targetZone === "tower" ? mechanics.unitHpBonus ?? 0 : 0;
   card.status.permanentHpBonus = (card.status.permanentHpBonus ?? 0) + towerHpBonus;
-  card.currentHp = definition.hp + card.status.permanentHpBonus;
+  card.status.towerHpBonusApplied = towerHpBonus;
+  card.currentHp = definition.hp + card.status.permanentHpBonus + (card.status.auraHpBonus ?? 0);
 
   if (targetZone === "barracks" || targetZone === "stronghold") {
     card.status.readyToAct = false;

@@ -494,9 +494,11 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
     ],
   },
   Krasnolud: {
+    // v4: HP 3→2, ATK 3→2 (Codex audit — poprzednia wartość była pozostałością z v3, cards (1) 2.py
+    // i PDF jednoznacznie podają 2/2).
     name: "Krasnolud",
-    hp: 3,
-    atk: 3,
+    hp: 2,
+    atk: 2,
     canTarget: LAND,
     targetCategory: LAND,
     infrastructureForbidden: false,

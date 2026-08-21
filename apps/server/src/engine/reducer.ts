@@ -309,6 +309,10 @@ export function applyAction(prevState: GameState, action: GameAction, catalog: C
       // wiedząc nic o Wieży).
       const towerHpBonus = action.infrastructure === "tower" ? mechanics.unitHpBonus ?? 0 : 0;
       card.status.permanentHpBonus = (card.status.permanentHpBonus ?? 0) + towerHpBonus;
+      // Zapamiętaj, ile z permanentHpBonus pochodzi z Wieży — potrzebne przez relocateUnitToZone
+      // (zones.ts), żeby poprawnie odjąć TYLKO ten bonus przy późniejszym opuszczeniu Wieży
+      // (Harpii Zryw/Galop/Powietrzny Transport/Zamieszanie), zob. Codex audit.
+      card.status.towerHpBonusApplied = towerHpBonus;
       card.currentHp = definition.hp + card.status.permanentHpBonus;
       card.currentAtk = definition.atk + (card.status.permanentAtkBonus ?? 0);
 
