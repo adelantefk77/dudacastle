@@ -69,16 +69,27 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
     player.kingdomHp = Math.min(player.kingdomHp + Number(params?.amount ?? 1), player.maxKingdomHp);
   },
 
-  // Wzmocnienie (Faun, Druid, Feniks, Mag, Elf Świetlisty) — jednorazowy przyrost na start tury, nie aura ciągła.
-  buffOwnUnitsHp: ({ state, catalog, sourceCard, ownerMatchPlayerId, params }) => {
-    const amount = Number(params?.amount ?? 1);
-    // nowe-polecenia.pdf #1/#3: wzmacnia wszystkie POZOSTAŁE jednostki właściciela, nigdy siebie —
-    // wcześniej jednostka z Wzmocnieniem błędnie liczyła się we własnym gronie celów.
-    for (const unit of battlefieldUnitsOf(state, catalog, ownerMatchPlayerId)) {
-      if (unit.instanceId === sourceCard.instanceId) continue;
-      unit.status.permanentHpBonus = (unit.status.permanentHpBonus ?? 0) + amount;
-      unit.currentHp += amount;
+  // Wzmocnienie (Faun, Druid, Feniks, Mag, Elf Świetlisty, Munmaa) — v4: to teraz ŻYWA, CIĄGŁA
+  // aura (nie jednorazowa mutacja), przeliczana w auras.ts recomputeAuras. Ta zdolność ma
+  // trigger "passive_aura" i effectKey "wzmocnienieAura" — nie ma osobnej funkcji w tym rejestrze,
+  // bo nigdy nie jest wywoływana przez resolveEffect (auras.ts odczytuje jej params bezpośrednio).
+
+  // Śpiew Natury (Faun + Elf Leśny, on_play obu kart) — v4: jednorazowy, samo-konsumujący się
+  // zryw (nie trwała aura): gdy w obszarze gry są jednocześnie Faun i Elf Leśny, wszystkie
+  // jednostki (wliczając ich) dostają +2 ATK do końca tej tury (jak Inicjatywa — tempAtkBonus,
+  // konsumowane przy pierwszym ataku), po czym OBIE karty trafiają na stos odrzuconych.
+  faunElfSongBurst: ({ state, catalog, ownerMatchPlayerId, emit }) => {
+    const units = battlefieldUnitsOf(state, catalog, ownerMatchPlayerId);
+    const byName = (name: string) => units.find((u) => getUnitDefinition(catalog, u.definitionId).name === name);
+    const faun = byName("Faun");
+    const elfLesny = byName("Elf Leśny");
+    if (!faun || !elfLesny) return;
+    for (const unit of units) {
+      unit.status.tempAtkBonus = (unit.status.tempAtkBonus ?? 0) + 2;
     }
+    destroyUnit(state, catalog, faun, emit);
+    destroyUnit(state, catalog, elfLesny, emit);
+    emit("FAUN_ELF_SONG_TRIGGERED", { matchPlayerId: ownerMatchPlayerId });
   },
 
   // Inicjatywa (Elf Leśny, Gryf, Czarodziej, Elf Mroczny, Elf Świetlisty, Munmaa...) — konsumowane przy pierwszym ataku.
@@ -219,10 +230,21 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
     if (!target || target.ownerMatchPlayerId !== ownerMatchPlayerId) {
       throw new GameRuleError("Nieprawidłowa jednostka docelowa.", "INVALID_TARGET");
     }
+    // v4: Trening z Gráfeldr'em zastępuje Trening z Wojownikiem Srebrnych Głów, z nowym zestawem
+    // wyborów (Szał Bitewny / Zręczność / Znawca Ścieżek / Szarża — Uzdrowienie usunięte). Szał
+    // Bitewny i Znawca Ścieżek nie mają natychmiastowego efektu do rozpatrzenia — to zdolności
+    // reaktywne/pasywne, więc zamiast resolveEffect ustawiamy jednorazową flagę konsumowaną przy
+    // najbliższej okazji (śmierć celu / najbliższy zakup) — zob. combat.ts destroyUnit i reducer.ts.
+    if (chosen === "szal_bitewny") {
+      target.status.oneShotSzalBitewnyPending = true;
+      return;
+    }
+    if (chosen === "znawca_sciezek") {
+      getPlayer(state, ownerMatchPlayerId).oneShotPathExpertPending = true;
+      return;
+    }
     const oneShotEffects: Record<string, { effectKey: string; params?: Record<string, unknown> }> = {
-      uzdrowienie: { effectKey: "healKingdom", params: { amount: 1 } },
       zrecznosc: { effectKey: "drawFromStartingDeck", params: { count: 1 } },
-      inicjatywa: { effectKey: "buffSelfAtkNextAttack", params: { amount: 2 } },
       szarza: { effectKey: "extraAttackThenDiscard" },
     };
     const mapped = oneShotEffects[chosen];
@@ -305,10 +327,12 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
     drawAndPlaceFromStartingDeck(state, catalog, ownerMatchPlayerId, Number(params?.hpBonus ?? 0));
   },
 
-  // Przysługa dla Księcia
+  // Przysługa dla Księcia — v4: pominięta tura jest też NIETYKALNA (PDF: "Pomiń następną turę
+  // (nietykalny), potem dobierz darmową kartę z Talii Królestwa").
   skipTurnThenFreeUnitDraw: ({ state, ownerMatchPlayerId }) => {
     const player = getPlayer(state, ownerMatchPlayerId);
     player.turnsToSkip += 1;
+    player.untargetableTurnsRemaining = Math.max(player.untargetableTurnsRemaining, 1);
     player.scheduledTurnEffects.push({ id: nanoid(), effectKey: "freeKingdomDeckDraw", turnsUntil: 0 });
   },
 
@@ -428,20 +452,18 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
     state.cards[card.instanceId] = card;
   },
 
-  // Natchnienie (Abzugud, on_play) — v3: jednorazowy zryw dla jednostek AKTUALNIE w grze, nie trwała aura.
-  buffUnitsCurrentlyInPlayAtkOnce: ({ state, catalog, ownerMatchPlayerId, params }) => {
-    const amount = Number(params?.amount ?? 1);
-    for (const unit of battlefieldUnitsOf(state, catalog, ownerMatchPlayerId)) {
-      unit.currentAtk += amount;
-    }
-  },
+  // Natchnienie (Abzugud, Czarodziej) — v4: to teraz ŻYWA, CIĄGŁA aura (nie jednorazowy zryw),
+  // trigger "passive_aura" / effectKey "auraAtkAllOwnUnits", przeliczana w auras.ts recomputeAuras.
+  // Nie ma tu osobnej funkcji — nigdy nie jest wywoływana przez resolveEffect.
 
-  // Siostrzana Przysięga (Amazonka x2, on_turn_start) — podejrzyj wierzch talii startowej,
-  // zagraj/dobierz najlepszą kartę, resztę rozdziel między odrzucone i spód talii.
+  // Siostrzana Przysięga (Amazonka, on_turn_start, v4: próg 1 sztuki) — podejrzyj wierzch talii
+  // startowej, zagraj/dobierz najlepszą kartę, jedną odrzuć, jedną odłóż z powrotem na WIERZCH
+  // talii (zob. simulator_v3 (1) 2.py amazon_sisterly_oath: `self.deck.append(c)`, gdzie draw()
+  // dobiera przez `.pop()` z końca listy — "koniec listy" = wierzch talii).
   // Uproszczenie: nasz silnik nie ma interaktywnego "podejrzyj i wybierz" dla gracza — użyto tej
   // samej heurystyki wartości co w cards.py priority_score (uproszczonej, bez bonusów per-zdolność).
   amazonSisterlyOath: ({ state, catalog, ownerMatchPlayerId, params }) => {
-    const requiredCount = Number(params?.requiredCount ?? 2);
+    const requiredCount = Number(params?.requiredCount ?? 1);
     const amazonCount = battlefieldUnitsOf(state, catalog, ownerMatchPlayerId).filter(
       (u) => getUnitDefinition(catalog, u.definitionId).name === "Amazonka",
     ).length;
@@ -467,19 +489,24 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
     const rest = scored.slice(1).map((s) => s.card);
     if (rest[0]) moveToDiscard(state, catalog, rest[0]);
     if (rest[1]) {
-      const maxIndex = cardsInZone(state, ownerMatchPlayerId, "starting_deck").reduce(
-        (max, c) => Math.max(max, c.slotIndex ?? 0),
-        -1,
-      );
+      // Wraca na WIERZCH talii startowej (najbliższa do dobrania) — czyli najniższy slotIndex
+      // spośród pozostałych kart w tej strefie, pomniejszony o 1.
+      const remaining = cardsInZone(state, ownerMatchPlayerId, "starting_deck");
+      const minIndex = remaining.reduce((min, c) => Math.min(min, c.slotIndex ?? 0), 0);
       rest[1].zone = "starting_deck";
-      rest[1].slotIndex = maxIndex + 1;
+      rest[1].slotIndex = minIndex - 1;
     }
   },
 
   // Katapulta (Krasnolud, activated) — trwałe, opcjonalne połączenie dwóch Krasnoludów w obszarze
-  // gry w jedną kartę Katapulty (4 HP / 6 ATK / lądowe i powietrzne). Partner jest odrzucany jako
-  // pełna karta; ta karta zamienia definitionId na Katapultę (zob. zones.ts moveToDiscard —
-  // przy jej ewentualnym późniejszym odrzuceniu wraca jako 2 karty Krasnoluda).
+  // gry w jedną kartę Katapulty (4 HP / 6 ATK / lądowe i powietrzne). Partner jest CAŁKOWICIE
+  // USUWANY ze stanu gry (nie odrzucany jako osobna karta!) — PDF: "przy odrzuceniu [Katapulty]
+  // wraca jako 2 osobne Krasnoludy" opisuje TYLKO odrzucenie GOTOWEJ Katapulty (zob. zones.ts
+  // moveToDiscard), nie sam moment połączenia. Odrzucenie partnera TUTAJ (zamiast usunięcia)
+  // podwajałoby liczbę kart w obiegu — 1 prawdziwa karta trafiałaby na odrzucone przy merge, a
+  // POTEM przy ewentualnym odrzuceniu samej Katapulty moveToDiscard i tak odtwarza 2 nowe karty
+  // Krasnoluda, tworząc fantomową 3. kartę znikąd (znalezione i naprawione przy izolowanym teście
+  // tej samej logiki dla nowego Kolczana Prawilności).
   mergeIntoKatapulta: ({ state, catalog, sourceCard, ownerMatchPlayerId, actionParams, emit }) => {
     const partnerId = String(actionParams?.partnerInstanceId ?? "");
     const partner = state.cards[partnerId];
@@ -503,7 +530,7 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
       throw new GameRuleError("Do połączenia potrzeba dwóch Krasnoludów.", "INVALID_MERGE_PARTNER");
     }
     const katapultaDef = getUnitDefinition(catalog, "unit-katapulta");
-    moveToDiscard(state, catalog, partner);
+    delete state.cards[partner.instanceId];
     sourceCard.definitionId = "unit-katapulta";
     // nowe-polecenia.pdf #6: jeśli sourceCard stoi w Wieży (permanentHpBonus) lub korzysta z aktywnej
     // aury (Płatnerz/Śpiew Natury -> auraHpBonus/auraAtkBonus), oba muszą przetrwać — nadpisanie
@@ -514,6 +541,63 @@ const EFFECT_REGISTRY: Record<string, EffectFn> = {
     sourceCard.currentAtk = katapultaDef.atk + (sourceCard.status.permanentAtkBonus ?? 0) + (sourceCard.status.auraAtkBonus ?? 0);
     sourceCard.status.isKrasnoludMerge = true;
     emit("KRASNOLUD_MERGED_INTO_KATAPULTA", { cardInstanceId: sourceCard.instanceId, discardedPartnerId: partner.instanceId });
+  },
+
+  // Kolczan Prawilności (Doświadczony Łucznik, activated) — v4: analogiczne, trwałe, opcjonalne
+  // połączenie dwóch Doświadczonych Łuczników w jedną kartę (2 HP / 2 ATK / lądowe i powietrzne),
+  // zob. mergeIntoKatapulta powyżej (ta sama logika stref/aur, zob. też zones.ts moveToDiscard —
+  // przy ewentualnym odrzuceniu wraca jako 2 karty Doświadczonego Łucznika).
+  mergeIntoKolczan: ({ state, catalog, sourceCard, ownerMatchPlayerId, actionParams, emit }) => {
+    const partnerId = String(actionParams?.partnerInstanceId ?? "");
+    const partner = state.cards[partnerId];
+    const eligibleMergeZones = ["play_area", "tower", "mine", "barracks"];
+    if (
+      !partner ||
+      partner.ownerMatchPlayerId !== ownerMatchPlayerId ||
+      partner.instanceId === sourceCard.instanceId ||
+      !eligibleMergeZones.includes(partner.zone) ||
+      !eligibleMergeZones.includes(sourceCard.zone)
+    ) {
+      throw new GameRuleError("Nieprawidłowy partner do połączenia.", "INVALID_MERGE_PARTNER");
+    }
+    const partnerDef = getUnitDefinition(catalog, partner.definitionId);
+    const sourceDef = getUnitDefinition(catalog, sourceCard.definitionId);
+    if (partnerDef.name !== "Doświadczony Łucznik" || sourceDef.name !== "Doświadczony Łucznik") {
+      throw new GameRuleError("Do połączenia potrzeba dwóch Doświadczonych Łuczników.", "INVALID_MERGE_PARTNER");
+    }
+    const kolczanDef = getUnitDefinition(catalog, "unit-kolczan-prawilnosci");
+    // Partner CAŁKOWICIE USUWANY (nie odrzucany) — zob. identyczne uzasadnienie w mergeIntoKatapulta.
+    delete state.cards[partner.instanceId];
+    sourceCard.definitionId = "unit-kolczan-prawilnosci";
+    sourceCard.currentHp = kolczanDef.hp + (sourceCard.status.permanentHpBonus ?? 0) + (sourceCard.status.auraHpBonus ?? 0);
+    sourceCard.currentAtk = kolczanDef.atk + (sourceCard.status.permanentAtkBonus ?? 0) + (sourceCard.status.auraAtkBonus ?? 0);
+    sourceCard.status.isLucznikMerge = true;
+    emit("LUCZNIK_MERGED_INTO_KOLCZAN", { cardInstanceId: sourceCard.instanceId, discardedPartnerId: partner.instanceId });
+  },
+
+  // Przywołanie (Munmaa, on_death) — v4: jeśli Munmaa zostanie odrzucona (z JAKIEGOKOLWIEK
+  // powodu, bez wymogu pary), odzyskaj JEDNĄ LOSOWĄ kartę ze stosu odrzuconych do ręki, następnie
+  // odrzuć najsłabszą kartę z ręki (zob. simulator_v3 (1) 2.py try_munmaa_summon).
+  recycleRandomFromDiscardOnOwnDeath: ({ state, catalog, sourceCard, ownerMatchPlayerId }) => {
+    const discard = cardsInZone(state, ownerMatchPlayerId, "discard").filter(
+      (c) => c.instanceId !== sourceCard.instanceId,
+    );
+    if (discard.length === 0) return;
+    const recovered = discard[Math.floor(Math.random() * discard.length)];
+    moveToHand(recovered);
+    // Ręka może zawierać też trzymane karty Wydarzeń (nie tylko jednostki) — unitValueHeuristic
+    // wymaga definicji jednostki, więc licząc "najsłabszą" kartę bierzemy pod uwagę tylko
+    // jednostki; jeśli ręka nie ma żadnej, odrzucamy dowolną (pierwszą), tak jak Przywołanie Emisariusza.
+    const hand = cardsInZone(state, ownerMatchPlayerId, "hand");
+    if (hand.length === 0) return;
+    const handUnits = hand.filter((c) => catalog.get(c.definitionId)?.type === "unit");
+    const worst =
+      handUnits.length > 0
+        ? handUnits.reduce((min, c) =>
+            unitValueHeuristic(getUnitDefinition(catalog, c.definitionId)) < unitValueHeuristic(getUnitDefinition(catalog, min.definitionId)) ? c : min,
+          )
+        : hand[0];
+    moveToDiscard(state, catalog, worst);
   },
 };
 

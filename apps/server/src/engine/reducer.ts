@@ -179,10 +179,14 @@ export function applyAction(prevState: GameState, action: GameAction, catalog: C
       player.coins -= UNIT_PURCHASE_COST;
 
       // Gracz nigdy nie wie, jaka jednostka zostanie zakupiona — dobieramy wierzchnią, zakrytą kartę.
-      // Leśny Tropiciel (path_expert, v3): podejrzyj 2 wierzchnie karty, zatrzymaj lepszą, drugą
-      // odłóż pod spód talii królestwa zamiast zostawiać ją jako kolejną-do-dobrania.
+      // Leśny Tropiciel/Włócznik Fianna (path_expert, v3/v4): podejrzyj 2 wierzchnie karty, zatrzymaj
+      // lepszą, drugą odłóż pod spód talii królestwa zamiast zostawiać ją jako kolejną-do-dobrania.
+      // Trening z Gráfeldr'em może użyczyć tej samej zdolności jednorazowo (bez jednostki na planszy).
+      const hasPathExpert =
+        hasBattlefieldAbility(state, catalog, action.matchPlayerId, "pathExpertPeekAndKeepBest") ||
+        player.oneShotPathExpertPending === true;
       let bought: CardInstance;
-      if (kingdomDeck.length >= 2 && hasBattlefieldAbility(state, catalog, action.matchPlayerId, "pathExpertPeekAndKeepBest")) {
+      if (kingdomDeck.length >= 2 && hasPathExpert) {
         const [c1, c2] = kingdomDeck;
         const v1 = unitValueHeuristic(getUnitDefinition(catalog, c1.definitionId));
         const v2 = unitValueHeuristic(getUnitDefinition(catalog, c2.definitionId));
@@ -190,6 +194,7 @@ export function applyAction(prevState: GameState, action: GameAction, catalog: C
         bought = chosen;
         const maxIndex = kingdomDeck.reduce((max, c) => Math.max(max, c.slotIndex ?? 0), -1);
         buried.slotIndex = maxIndex + 1;
+        player.oneShotPathExpertPending = false;
       } else {
         bought = kingdomDeck[0];
       }
@@ -341,10 +346,15 @@ export function applyAction(prevState: GameState, action: GameAction, catalog: C
         throw new GameRuleError("Talia Wydarzeń jest pusta.", "EVENT_DECK_EMPTY");
       }
 
-      // Leśny Tropiciel (path_expert, v3): podejrzyj 2 wierzchnie karty Wydarzeń, zatrzymaj tę o
-      // pozytywnej polaryzacji (przy remisie/braku — pierwszą), drugą odłóż pod spód talii.
+      // Leśny Tropiciel/Włócznik Fianna (path_expert, v3/v4): podejrzyj 2 wierzchnie karty
+      // Wydarzeń, zatrzymaj tę o pozytywnej polaryzacji (przy remisie/braku — pierwszą), drugą
+      // odłóż pod spód talii. Trening z Gráfeldr'em może użyczyć tej samej zdolności jednorazowo.
+      const eventBuyer = getPlayer(state, action.matchPlayerId);
+      const hasPathExpertForEvent =
+        hasBattlefieldAbility(state, catalog, action.matchPlayerId, "pathExpertPeekAndKeepBest") ||
+        eventBuyer.oneShotPathExpertPending === true;
       let top: CardInstance;
-      if (eventDeck.length >= 2 && hasBattlefieldAbility(state, catalog, action.matchPlayerId, "pathExpertPeekAndKeepBest")) {
+      if (eventDeck.length >= 2 && hasPathExpertForEvent) {
         const [c1, c2] = eventDeck;
         const def1 = catalog.get(c1.definitionId);
         const def2 = catalog.get(c2.definitionId);
@@ -354,6 +364,7 @@ export function applyAction(prevState: GameState, action: GameAction, catalog: C
         top = chosen;
         const maxIndex = eventDeck.reduce((max, c) => Math.max(max, c.slotIndex ?? 0), -1);
         buried.slotIndex = maxIndex + 1;
+        eventBuyer.oneShotPathExpertPending = false;
       } else {
         top = eventDeck[0];
       }
@@ -364,7 +375,7 @@ export function applyAction(prevState: GameState, action: GameAction, catalog: C
       }
       assertSufficientCoins(state, action.matchPlayerId, definition.cost);
 
-      const player = getPlayer(state, action.matchPlayerId);
+      const player = eventBuyer;
       player.coins -= definition.cost;
       top.ownerMatchPlayerId = action.matchPlayerId;
 

@@ -15,8 +15,8 @@ function battlefieldUnitsOf(state: GameState, catalog: CardCatalog, matchPlayerI
 }
 
 /**
- * Przelicza bonusy HP/ATK pochodzące z aur pasywnych (Śpiew Natury, Zbrojne
- * Pospolite Ruszenie, Natchnienie, Płatnerz...) dla wszystkich jednostek w
+ * Przelicza bonusy HP/ATK pochodzące z aur pasywnych (Zbrojne Pospolite
+ * Ruszenie, Natchnienie, Wzmocnienie, Płatnerz...) dla wszystkich jednostek w
  * grze. Wywoływane po każdej akcji (idempotentnie), żeby aury reagowały na
  * zmiany składu obszaru gry (np. dobicie drugiego "Ludzie" aktywuje Zbrojne
  * Pospolite Ruszenie natychmiast), bez potrzeby ręcznego wywoływania efektu
@@ -33,59 +33,56 @@ export function recomputeAuras(state: GameState, catalog: CardCatalog): void {
     const units = battlefieldUnitsOf(state, catalog, player.matchPlayerId);
     const unitNames = units.map((u) => getUnitDefinition(catalog, u.definitionId).name);
 
-    let flatAtkBonus = 0; // Natchnienie itp. — jednakowy dla wszystkich jednostek gracza
-    let flatHpBonus = player.permanentUnitHpAura; // Płatnerz — trwały, dotyczy też przyszłych jednostek
+    // flatAtkBonus: bonus JEDNAKOWY dla wszystkich jednostek gracza (Zbrojne Pospolite Ruszenie —
+    // deduplikowane progowo — oraz Natchnienie — sumowane PER INSTANCJA, zob. niżej).
+    let flatAtkBonus = 0;
+    const flatHpBonus = player.permanentUnitHpAura; // Płatnerz — trwały, dotyczy też przyszłych jednostek
 
-    // Każda WARUNKOWA aura (np. "2x Ludzie = +1 ATK całej armii") opisuje próg spełniony przez
-    // ARMIĘ, nie bonus przyznawany osobno przez każdą kopię jednostki, która go niesie — bez tej
-    // deduplikacji po `ability.key` 3x Ludzie dawałoby błędnie +3 ATK zamiast +1 (a przy usuwaniu/
-    // dodawaniu jednostek między turami ta nadwyżka rozjeżdżała currentAtk, bo poniższa pętla
-    // aplikuje tylko RÓŻNICĘ względem poprzednio zapisanego bonusu).
-    const countedAtkAbilities = new Set<string>();
+    // Każda WARUNKOWA aura progowa (np. "2x Ludzie = +1 ATK całej armii") opisuje próg spełniony
+    // przez ARMIĘ, nie bonus przyznawany osobno przez każdą kopię jednostki, która go niesie — bez
+    // tej deduplikacji po `ability.key` 3x Ludzie dawałoby błędnie +3 ATK zamiast +1 (a przy
+    // usuwaniu/dodawaniu jednostek między turami ta nadwyżka rozjeżdżała currentAtk, bo poniższa
+    // pętla aplikuje tylko RÓŻNICĘ względem poprzednio zapisanego bonusu).
+    const countedThresholdAtkAbilities = new Set<string>();
     for (const unit of units) {
       const def = getUnitDefinition(catalog, unit.definitionId);
       for (const ability of def.abilities) {
-        if (ability.trigger !== "passive_aura" || countedAtkAbilities.has(ability.key)) continue;
+        if (ability.trigger !== "passive_aura") continue;
         const params = ability.params ?? {};
         switch (ability.effectKey) {
           case "auraAtkAllOwnUnits":
+            // Natchnienie (Abzugud/Czarodziej): ŻYWA aura, dopóki karta jest w obszarze gry,
+            // WLICZAJĄC samą siebie. Każda kopia kontrybuuje NIEZALEŻNIE (2 Czarodziejów = +2 ATK),
+            // więc celowo BEZ deduplikacji po ability.key (w przeciwieństwie do aur progowych).
             flatAtkBonus += Number(params.amount ?? 0);
-            countedAtkAbilities.add(ability.key);
             break;
           case "conditionalAuraAtkIfUnitCount": {
+            if (countedThresholdAtkAbilities.has(ability.key)) break;
             const requiredCount = Number(params.requiredCount ?? 0);
             const name = String(params.unitName ?? "");
             const count = unitNames.filter((n) => n === name).length;
             if (count >= requiredCount) {
               flatAtkBonus += Number(params.amount ?? 0);
-              countedAtkAbilities.add(ability.key);
+              countedThresholdAtkAbilities.add(ability.key);
             }
             break;
           }
           default:
-            break; // np. jointAttackThreshold, mineProductionOverride — nie są aurami staty
+            break; // np. jointAttackThreshold, mineProductionOverride, wzmocnienieAura — obsłużone osobno/gdzie indziej
         }
       }
     }
 
-    // Aury warunkujące HP liczone osobno (ta sama deduplikacja co powyżej), bo część (Śpiew Natury)
-    // wymaga współwystępowania konkretnego zestawu jednostek.
-    const countedHpAbilities = new Set<string>();
+    // Wzmocnienie (Faun/Druid/Feniks/Mag/Elf Świetlisty...): ŻYWA, CIĄGŁA aura HP, ale — inaczej niż
+    // Natchnienie — KAŻDY nosiciel wyklucza WYŁĄCZNIE SIEBIE z grona odbiorców własnego bonusu, więc
+    // bonus jest RÓŻNY dla różnych jednostek (nie da się go zwinąć do jednego flatHpBonus). Zbieramy
+    // najpierw listę wszystkich źródeł, potem dla każdej jednostki sumujemy bonus wszystkich INNYCH źródeł.
+    const wzmocnienieSources: Array<{ instanceId: string; amount: number }> = [];
     for (const unit of units) {
       const def = getUnitDefinition(catalog, unit.definitionId);
       for (const ability of def.abilities) {
-        if (
-          ability.trigger !== "passive_aura" ||
-          ability.effectKey !== "conditionalAuraHpIfUnitsPresent" ||
-          countedHpAbilities.has(ability.key)
-        ) {
-          continue;
-        }
-        const requiresNames = (ability.params?.requiresUnitNames as string[] | undefined) ?? [];
-        const satisfied = requiresNames.every((n) => unitNames.includes(n));
-        if (satisfied) {
-          flatHpBonus += Number(ability.params?.amount ?? 0);
-          countedHpAbilities.add(ability.key);
+        if (ability.trigger === "passive_aura" && ability.effectKey === "wzmocnienieAura") {
+          wzmocnienieSources.push({ instanceId: unit.instanceId, amount: Number(ability.params?.amount ?? 0) });
         }
       }
     }
@@ -93,10 +90,16 @@ export function recomputeAuras(state: GameState, catalog: CardCatalog): void {
     for (const unit of units) {
       const prevAtk = unit.status.auraAtkBonus ?? 0;
       const prevHp = unit.status.auraHpBonus ?? 0;
+      let unitHpBonus = flatHpBonus;
+      for (const source of wzmocnienieSources) {
+        if (source.instanceId !== unit.instanceId) unitHpBonus += source.amount;
+      }
       unit.currentAtk += flatAtkBonus - prevAtk;
-      unit.currentHp += flatHpBonus - prevHp;
+      // max(1, ...) — usunięcie/zmniejszenie aury nie może "zabić" jednostki samym przeliczeniem
+      // (zob. simulator_v3 (1) 2.py sync_all_hp: `max(1, hp + diff) if hp > 0 else hp`).
+      unit.currentHp = Math.max(1, unit.currentHp + (unitHpBonus - prevHp));
       unit.status.auraAtkBonus = flatAtkBonus;
-      unit.status.auraHpBonus = flatHpBonus;
+      unit.status.auraHpBonus = unitHpBonus;
     }
   }
 }

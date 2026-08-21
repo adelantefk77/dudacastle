@@ -17,14 +17,14 @@ export {
 };
 
 /**
- * HP Królestwa wg liczby graczy (v3 — zob. cards.py CASTLE_HP_BY_PLAYERS). Ta sama wartość
- * dla każdego królestwa (gra nie różnicuje balansu startowego HP między królestwami).
+ * HP Królestwa wg liczby graczy (v4 — zob. `cards (1) 2.py` CASTLE_HP_BY_PLAYERS / PDF sekcja 2).
+ * Ta sama wartość dla każdego królestwa (gra nie różnicuje balansu startowego HP między królestwami).
  */
 const CASTLE_HP_BY_PLAYER_COUNT: Record<number, number> = {
-  2: 25,
-  3: 20,
-  4: 15,
-  5: 12,
+  2: 20,
+  3: 16,
+  4: 12,
+  5: 10,
 };
 
 export const KINGDOMS: KingdomDefinition[] = [
@@ -88,9 +88,30 @@ export const KATAPULTA_DEFINITION: UnitCardDefinition = {
   abilities: KATAPULTA_TEMPLATE.abilities,
 };
 
+/**
+ * Kolczan Prawilności (v4) nie należy do żadnej talii królestwa — powstaje wyłącznie z połączenia
+ * dwóch Doświadczonych Łuczników w obszarze gry (zob. effectKey "mergeIntoKolczan"), analogicznie
+ * do Katapulty powyżej.
+ */
+const KOLCZAN_PRAWILNOSCI_TEMPLATE = UNIT_TEMPLATES["Kolczan Prawilności"];
+export const KOLCZAN_PRAWILNOSCI_DEFINITION: UnitCardDefinition = {
+  id: "unit-kolczan-prawilnosci",
+  type: "unit",
+  kingdomId: "merge",
+  name: KOLCZAN_PRAWILNOSCI_TEMPLATE.name,
+  cost: 0,
+  hp: KOLCZAN_PRAWILNOSCI_TEMPLATE.hp,
+  atk: KOLCZAN_PRAWILNOSCI_TEMPLATE.atk,
+  canTarget: KOLCZAN_PRAWILNOSCI_TEMPLATE.canTarget,
+  targetCategory: KOLCZAN_PRAWILNOSCI_TEMPLATE.targetCategory,
+  infrastructureForbidden: KOLCZAN_PRAWILNOSCI_TEMPLATE.infrastructureForbidden,
+  abilities: KOLCZAN_PRAWILNOSCI_TEMPLATE.abilities,
+};
+
 export const ALL_UNIT_DEFINITIONS: UnitCardDefinition[] = [
   ...Object.values(KINGDOM_UNIT_DEFINITIONS).flat(),
   KATAPULTA_DEFINITION,
+  KOLCZAN_PRAWILNOSCI_DEFINITION,
 ];
 
 export {

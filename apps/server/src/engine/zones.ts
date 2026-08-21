@@ -100,6 +100,7 @@ export function relocateUnitToZone(
  */
 export function moveToDiscard(state: GameState, catalog: CardCatalog, card: CardInstance): void {
   const wasKrasnoludMerge = card.status.isKrasnoludMerge === true;
+  const wasLucznikMerge = card.status.isLucznikMerge === true;
   card.zone = "discard";
   card.slotIndex = null;
   card.status = {};
@@ -123,6 +124,27 @@ export function moveToDiscard(state: GameState, catalog: CardCatalog, card: Card
         status: {},
       };
       state.cards[extraKrasnolud.instanceId] = extraKrasnolud;
+    }
+  }
+
+  if (wasLucznikMerge) {
+    // Kolczan Prawilności (v4) — analogiczny mechanizm do Katapulty: wraca jako 2 karty
+    // Doświadczonego Łucznika zamiast pozostać nielegalnym, niekupowalnym egzemplarzem na odrzuconych.
+    const owner = getPlayer(state, card.ownerMatchPlayerId);
+    const lucznikDefId = `${owner.kingdomId}-doswiadczony-lucznik`;
+    if (catalog.get(lucznikDefId)) {
+      card.definitionId = lucznikDefId;
+      const extraLucznik: CardInstance = {
+        instanceId: nanoid(),
+        definitionId: lucznikDefId,
+        ownerMatchPlayerId: card.ownerMatchPlayerId,
+        zone: "discard",
+        slotIndex: null,
+        currentHp: 0,
+        currentAtk: 0,
+        status: {},
+      };
+      state.cards[extraLucznik.instanceId] = extraLucznik;
     }
   }
 }

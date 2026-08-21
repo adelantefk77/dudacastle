@@ -320,6 +320,17 @@ function GameBoard({
 
     if (def.effectKey === "grantOneShotAbilityToUnit") {
       const ownUnits = [...myPlayArea, ...myTowerUnits, ...myMineUnits, ...myBarracksUnits, ...myStrongholdUnits];
+      // v4: Trening z Gráfeldr'em — wybory sterowane przez params.choices (nie na stałe zaszyte),
+      // żeby uniknąć rozjazdu z listą faktycznie obsługiwaną przez effect-resolver.ts.
+      const abilityLabels: Record<string, string> = {
+        uzdrowienie: "Uzdrowienie",
+        zrecznosc: "Zręczność",
+        inicjatywa: "Inicjatywa",
+        szarza: "Szarża",
+        szal_bitewny: "Szał Bitewny",
+        znawca_sciezek: "Znawca Ścieżek",
+      };
+      const choices = (def.params?.choices as string[] | undefined) ?? [];
       setModal({
         title: def.name,
         description: def.description,
@@ -332,12 +343,7 @@ function GameBoard({
           {
             key: "chosenAbilityKey",
             label: "Zdolność",
-            options: [
-              { value: "uzdrowienie", label: "Uzdrowienie" },
-              { value: "zrecznosc", label: "Zręczność" },
-              { value: "inicjatywa", label: "Inicjatywa" },
-              { value: "szarza", label: "Szarża" },
-            ],
+            options: choices.map((key) => ({ value: key, label: abilityLabels[key] ?? key })),
           },
         ],
         onConfirm: (values) => {
@@ -438,6 +444,28 @@ function GameBoard({
           {
             key: "partnerInstanceId",
             label: "Drugi Krasnolud",
+            options: candidates.map((u) => ({ value: u.instanceId, label: `${getCardDefinition(u.definitionId)?.name} (${u.zone})` })),
+          },
+        ],
+        onConfirm: (values) => {
+          sendAction({ type: "USE_ABILITY", matchPlayerId: myPlayerId, cardInstanceId: card.instanceId, abilityKey: ability.key, params: { partnerInstanceId: values.partnerInstanceId } });
+          closeModal();
+        },
+      });
+      return;
+    }
+
+    if (ability.effectKey === "mergeIntoKolczan") {
+      // Kolczan Prawilności: analogiczne do mergeIntoKatapulta powyżej, ale dla pary Doświadczonych Łuczników.
+      const candidates = [...myPlayArea, ...myTowerUnits, ...myMineUnits, ...myBarracksUnits].filter(
+        (u) => u.instanceId !== card.instanceId && getCardDefinition(u.definitionId)?.name === "Doświadczony Łucznik",
+      );
+      setModal({
+        title: ability.description,
+        fields: [
+          {
+            key: "partnerInstanceId",
+            label: "Drugi Doświadczony Łucznik",
             options: candidates.map((u) => ({ value: u.instanceId, label: `${getCardDefinition(u.definitionId)?.name} (${u.zone})` })),
           },
         ],

@@ -152,6 +152,9 @@ export function destroyUnit(
   actionParams?: Record<string, unknown>,
 ): void {
   const def = getUnitDefinition(catalog, targetCard.definitionId);
+  // Trening z Gráfeldr'em: Szał Bitewny użyczony jednorazowo — odczytać PRZED moveToDiscard, bo
+  // ta funkcja czyści cały status (poniżej), a granted-flaga nie żyje w definicji karty (def.abilities).
+  const hadOneShotSzalBitewny = targetCard.status.oneShotSzalBitewnyPending === true;
   // moveToDiscard czyści CAŁY status (nowe-polecenia.pdf #5/#10) — destroyedOnTurn musi być
   // ustawione PO tym wywołaniu, inaczej zostałoby natychmiast wyzerowane razem z resztą.
   moveToDiscard(state, catalog, targetCard);
@@ -169,6 +172,17 @@ export function destroyUnit(
         emit,
       });
     }
+  }
+  if (hadOneShotSzalBitewny) {
+    resolveEffect("retaliateKillAttacker", {
+      state,
+      catalog,
+      sourceCard: targetCard,
+      ownerMatchPlayerId: targetCard.ownerMatchPlayerId,
+      params: { onlyLowerHpIfJointAttack: true },
+      actionParams,
+      emit,
+    });
   }
 }
 

@@ -5,7 +5,7 @@ import { ALL_UNIT_DEFINITIONS, EVENT_DECK_UNIT_DEFINITIONS, TOWER_DEFINITIONS } 
  * serwuje je pod ścieżką /cards/*.webp bez przechodzenia przez bundler.
  *
  * Jednostki są mapowane PO NAZWIE (nie po definitionId), bo ten sam szablon jednostki (np. Gryf,
- * Czarodziej, Młody Smok, Ludzie, Feniks, Łucznik) występuje w kilku różnych królestwach z różnymi
+ * Czarodziej, Młody Smok, Ludzie, Feniks, Doświadczony Łucznik) występuje w kilku różnych królestwach z różnymi
  * definitionId, ale to fizycznie ta sama karta — jeden wygenerowany obraz obsługuje wszystkie
  * jej wystąpienia.
  */
@@ -24,10 +24,13 @@ const UNIT_ART_BY_NAME: Record<string, string> = {
   Cyklop: "/cards/cyklop.webp",
   Czarodziej: "/cards/czarodziej.webp",
   "Doświadczony Królewski Gwardzista": "/cards/doswiadczony-krolewski-gwardzista.webp",
+  // v4: brak wygenerowanej grafiki dla nowej jednostki — dzieli obraz z bliźniaczym Gwardzistą.
+  "Królewski Gwardzista Ninurty": "/cards/doswiadczony-krolewski-gwardzista.webp",
   "Elf Mroczny": "/cards/elf-mroczny.webp",
   Feniks: "/cards/feniks.webp",
   "Młody Smok": "/cards/mlody-smok.webp",
-  "Legendarny Wyvern": "/cards/legendarny-wyvern.webp",
+  // v4: przemianowana z "Legendarny Wyvern" na "Wyvern" — ten sam plik graficzny.
+  Wyvern: "/cards/legendarny-wyvern.webp",
   Nagual: "/cards/nagual.webp",
   "Emisariusz En-šukud": "/cards/emisariusz-en-sukud.webp",
   Minotaur: "/cards/minotaur.webp",
@@ -38,16 +41,23 @@ const UNIT_ART_BY_NAME: Record<string, string> = {
   Centaur: "/cards/centaur.webp",
   "Elf Świetlisty": "/cards/elf-swietlisty.webp",
   Pegaz: "/cards/pegaz.webp",
-  Łucznik: "/cards/lucznik.webp",
+  // v4: przemianowany z "Łucznik" na "Doświadczony Łucznik" — ten sam plik graficzny.
+  "Doświadczony Łucznik": "/cards/lucznik.webp",
+  // v4: NOWA jednostka (produkt połączenia 2 Doświadczonych Łuczników) — brak dedykowanej
+  // grafiki, dzieli obraz z Łucznikiem do czasu wygenerowania własnej.
+  "Kolczan Prawilności": "/cards/lucznik.webp",
   Medjayet: "/cards/medjayet.webp",
   Amazonka: "/cards/amazonka.webp",
   Munmaa: "/cards/munmaa.webp",
 };
 
 const EVENT_ART: Record<string, string> = {
-  "event-platnerz": "/cards/event-platnerz.webp",
-  "event-trening-z-wojownikiem-srebrnych-glow": "/cards/event-trening-wojownik.webp",
-  "event-wizyta-generala-szarych-plaszczy": "/cards/event-general-szarych-plaszczy.webp",
+  // v4: id przemianowane wraz z kartami (Płatnerz→Cearta, Trening z Wojownikiem Srebrnych
+  // Głów→Trening z Gráfeldr'em, Wizyta Generała Szarych Płaszczy→Wizyta Bohatera Srebrnych Głów,
+  // Mgła→Mixtli) — te same pliki graficzne, bo nie wygenerowano nowych.
+  "event-cearta": "/cards/event-platnerz.webp",
+  "event-trening-z-grafeldrem": "/cards/event-trening-wojownik.webp",
+  "event-wizyta-bohatera-srebrnych-glow": "/cards/event-general-szarych-plaszczy.webp",
   "event-kopalnia-goblinow": "/cards/event-kopalnia-goblinow.webp",
   // Tańsze warianty infrastruktury z talii Wydarzeń — dzielą grafikę z samą infrastrukturą.
   "event-warownia": "/cards/warownia.webp",
@@ -56,7 +66,7 @@ const EVENT_ART: Record<string, string> = {
   "event-sekrety-hrabiny": "/cards/event-sekrety-hrabiny.webp",
   "event-sprzyjajaca-pogoda": "/cards/event-sprzyjajaca-pogoda.webp",
   "event-zachodni-wiatr": "/cards/event-zachodni-wiatr.webp",
-  "event-mgla": "/cards/event-mgla.webp",
+  "event-mixtli": "/cards/event-mgla.webp",
   "event-dlugie-zacmienie-slonca": "/cards/dlugie-zacmienie-slonca.webp",
   "event-spotkanie-przyjaznego-trolla": "/cards/event-trolla.webp",
   "event-spotkanie-alchemika": "/cards/event-alchemika.webp",

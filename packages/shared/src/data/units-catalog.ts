@@ -1,16 +1,13 @@
 import type { Ability, TargetDomain } from "../types/card.js";
 
 /**
- * Szablony jednostek — v3 (zob. cards.py / simulator_v3.py dostarczone przez użytkownika,
- * traktowane jako źródło prawdy nadrzędne względem oryginalnej instrukcja.pdf tam, gdzie się
- * różnią). Zmiany względem pierwotnej transkrypcji PDF udokumentowane przy każdej jednostce.
+ * Szablony jednostek — v4 (zob. `cards (1) 2.py` / `simulator_v3 (1) 2.py` / The-Five-Crowns-
+ * Kompendium-Gracza.pdf dostarczone przez użytkownika, traktowane jako źródło prawdy nadrzędne
+ * względem poprzedniej wersji tego pliku). Zmiany udokumentowane przy każdej jednostce.
  *
- * DWA NIEZALEŻNE POLA KIERUNKOWE (to rozróżnienie było błędnie scalone w pierwszej wersji):
+ * DWA NIEZALEŻNE POLA KIERUNKOWE:
  * - `canTarget`: co ta jednostka MOŻE atakować (ofensywnie).
  * - `targetCategory`: czym ta jednostka JEST jako cel — kto może ją trafić (defensywnie).
- *   Wyprowadzone z broni na karcie fizycznej: miecz→land, skrzydła→air, miecz i skrzydła→both.
- *   Przykład: Gryf atakuje lądowe i powietrzne (`canTarget: both`), ale sam jest wyłącznie
- *   celem powietrznym (`targetCategory: air`) — ma tylko skrzydła, bez miecza.
  */
 export interface UnitTemplate {
   name: string;
@@ -38,27 +35,37 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
     abilities: [
       {
         key: "zrecznosc",
-        // v3: Zręczność to efekt REKURENCYJNY — dopóki jednostka żyje, KAŻDĄ własną turę
-        // dobierasz +1 kartę (poprzednio błędnie jednorazowe, tylko przy zagraniu).
         trigger: "on_turn_start",
         effectKey: "drawFromStartingDeck",
         params: { count: 1 },
         description: "Na początku każdej swojej tury, dopóki ta jednostka żyje, dobierz 1 dodatkową kartę z talii startowej.",
       },
       {
-        // Faun w cards.py ma WYŁĄCZNIE ["dexterity", "buff_hp_1"] — "uzdrowienie" z pierwotnej
-        // transkrypcji PDF zostało usunięte w v3 (znalezione i naprawione w audycie Gemini).
+        // v4: Wzmocnienie to ŻYWA, CIĄGŁA aura (nie jednorazowa mutacja) — zob. auras.ts.
+        // Obowiązuje dopóki ta jednostka pozostaje w obszarze gry, znika natychmiast po jej odejściu,
+        // i NIGDY nie wzmacnia samej siebie.
         key: "wzmocnienie",
-        trigger: "on_play",
-        effectKey: "buffOwnUnitsHp",
+        trigger: "passive_aura",
+        effectKey: "wzmocnienieAura",
         params: { amount: 1 },
-        description: "Po wejściu do gry zwiększ HP jednostek AKTUALNIE w obszarze gry o +1 HP.",
+        description: "Dopóki ta jednostka pozostaje w obszarze gry, wszystkie INNE Twoje jednostki otrzymują +1 HP.",
+      },
+      {
+        // Śpiew Natury sprawdzany przy on_play OBU kart pary (Faun i Elf Leśny) — niezależnie od
+        // tego, która z nich dopełnia parę jako druga, zob. identyczna zdolność u Elfa Leśnego.
+        key: "spiew_natury",
+        trigger: "on_play",
+        effectKey: "faunElfSongBurst",
+        params: {},
+        description:
+          "Gdy w obszarze gry masz jednocześnie Fauna i Elfa Leśnego: wszystkie Twoje jednostki (włącznie z nimi) otrzymują jednorazowo +2 ATK, po czym obie karty (Faun i Elf Leśny) trafiają na stos kart odrzuconych.",
       },
     ],
   },
   "Elf Leśny": {
     name: "Elf Leśny",
-    hp: 3,
+    // v4: HP 3→2.
+    hp: 2,
     atk: 3,
     canTarget: BOTH,
     targetCategory: LAND,
@@ -72,34 +79,32 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
         description: "Po ustawieniu w obszarze gry pierwszy atak tej jednostki otrzymuje +2 ATK.",
       },
       {
+        // v4: Śpiew Natury przestał być trwałą aurą — to JEDNORAZOWY, samo-konsumujący się zryw:
+        // gdy w obszarze gry są jednocześnie Faun i Elf Leśny, wszystkie jednostki (wliczając ich)
+        // dostają +2 ATK, po czym OBIE karty trafiają na stos odrzuconych.
         key: "spiew_natury",
-        trigger: "passive_aura",
-        effectKey: "conditionalAuraHpIfUnitsPresent",
-        params: { requiresUnitNames: ["Faun", "Elf Leśny"], amount: 1 },
-        description: "Jeżeli w obszarze gry masz Fauna i Elfa Leśnego, wszystkie Twoje jednostki otrzymują +1 HP.",
+        trigger: "on_play",
+        effectKey: "faunElfSongBurst",
+        params: {},
+        description:
+          "Gdy w obszarze gry masz jednocześnie Fauna i Elfa Leśnego: wszystkie Twoje jednostki (włącznie z nimi) otrzymują jednorazowo +2 ATK, po czym obie karty (Faun i Elf Leśny) trafiają na stos kart odrzuconych.",
       },
     ],
   },
   Gryf: {
     name: "Gryf",
-    hp: 5,
-    atk: 3,
+    // v4: HP 5→4, ATK 3→2, Inicjatywa USUNIĘTA (Gryf nie ma już żadnej zdolności).
+    hp: 4,
+    atk: 2,
     canTarget: BOTH,
     targetCategory: AIR,
     infrastructureForbidden: true,
-    abilities: [
-      {
-        key: "inicjatywa",
-        trigger: "on_play",
-        effectKey: "buffSelfAtkNextAttack",
-        params: { amount: 2 },
-        description: "Po ustawieniu w obszarze gry pierwszy atak tej jednostki otrzymuje +2 ATK.",
-      },
-    ],
+    abilities: [],
   },
   Ludzie: {
     name: "Ludzie",
-    hp: 2,
+    // v4: HP 2→1.
+    hp: 1,
     atk: 0,
     canTarget: LAND,
     targetCategory: LAND,
@@ -138,24 +143,24 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
       },
       {
         key: "wzmocnienie",
-        trigger: "on_play",
-        effectKey: "buffOwnUnitsHp",
+        trigger: "passive_aura",
+        effectKey: "wzmocnienieAura",
         params: { amount: 1 },
-        description: "Po wejściu do gry zwiększ HP jednostek AKTUALNIE w obszarze gry o +1 HP.",
+        description: "Dopóki ta jednostka pozostaje w obszarze gry, wszystkie INNE Twoje jednostki otrzymują +1 HP.",
       },
     ],
   },
   Najemnik: {
     name: "Najemnik",
-    hp: 2,
-    atk: 2,
+    // v4: HP 2→1, ATK 2→1.
+    hp: 1,
+    atk: 1,
     canTarget: LAND,
     targetCategory: LAND,
     infrastructureForbidden: false,
     abilities: [],
   },
   "Leśny Tropiciel": {
-    // NOWA jednostka (v3) — Skógarríki.
     name: "Leśny Tropiciel",
     hp: 1,
     atk: 0,
@@ -175,20 +180,22 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
   },
   Abzugud: {
     name: "Abzugud",
-    hp: 6,
-    atk: 5,
+    // v4: HP 6→5, ATK 5→4.
+    hp: 5,
+    atk: 4,
     canTarget: LAND,
     targetCategory: LAND,
     infrastructureForbidden: true,
     abilities: [
       {
+        // v4: Natchnienie to ŻYWA, CIĄGŁA aura (nie jednorazowy zryw) — dopóki ta jednostka
+        // pozostaje w obszarze gry, wszystkie Twoje jednostki (WLICZAJĄC ją samą) mają +1 ATK.
+        // Zob. auras.ts — sumuje się niezależnie per każda kopia tej zdolności w grze.
         key: "natchnienie",
-        // v3: jednorazowy zryw przy wejściu do gry (dotyczy jednostek AKTUALNIE w grze),
-        // nie trwała aura — nie działa na jednostki zagrane później i nie znika, gdy Abzugud pada.
-        trigger: "on_play",
-        effectKey: "buffUnitsCurrentlyInPlayAtkOnce",
+        trigger: "passive_aura",
+        effectKey: "auraAtkAllOwnUnits",
         params: { amount: 1 },
-        description: "Po wejściu do gry wszystkie Twoje jednostki AKTUALNIE w obszarze gry otrzymują jednorazowo +1 ATK.",
+        description: "Dopóki ta jednostka pozostaje w obszarze gry, wszystkie Twoje jednostki (wliczając ją) otrzymują +1 ATK.",
       },
     ],
   },
@@ -218,8 +225,9 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
   },
   Ork: {
     name: "Ork",
+    // v4: ATK 2→1.
     hp: 2,
-    atk: 2,
+    atk: 1,
     canTarget: LAND,
     targetCategory: LAND,
     infrastructureForbidden: false,
@@ -235,20 +243,18 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
         key: "horda",
         trigger: "passive_aura",
         effectKey: "jointAttackThreshold",
-        // UWAGA: simulator_v3.py nazywa ten tag "horde_3_double_combo" i tak opisuje zasadę
-        // (zgodnie z instrukcją: próg 3 Orków), ale JEGO WŁASNY kod (`combo_attacks`) sprawdza
-        // tylko `len(orks) >= 2` i bierze grupę 2-osobową — rozbieżność między nazwą/opisem a
-        // faktycznym kodem referencyjnym. Zachowujemy próg 3 (zgodny z nazwą tagu i instrukcją
-        // źródłową) — do potwierdzenia w audycie.
-        params: { unitName: "Ork", requiredCount: 3, multiplier: 2, splittable: true },
-        description: "Jeżeli w obszarze gry masz 3 Orki, ich wspólny atak zostaje podwojony i może zostać podzielony pomiędzy kilka celów.",
+        // v4: PDF/simulator_v3 (1) 2.py potwierdzają jednoznacznie próg 3 Orków I potrojenie
+        // (poprzednia wersja katalogu zachowywała próg 3 z podwojeniem — mnożnik był błędny).
+        params: { unitName: "Ork", requiredCount: 3, multiplier: 3, splittable: true },
+        description: "Jeżeli w obszarze gry masz 3 Orki, ich wspólny atak zostaje potrojony i może zostać podzielony pomiędzy kilka celów.",
       },
     ],
   },
   Harpia: {
     name: "Harpia",
-    hp: 3,
-    atk: 3,
+    // v4: HP 3→2, ATK 3→2.
+    hp: 2,
+    atk: 2,
     canTarget: BOTH,
     targetCategory: BOTH,
     infrastructureForbidden: false,
@@ -264,7 +270,8 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
   },
   Cyklop: {
     name: "Cyklop",
-    hp: 5,
+    // v4: HP 5→4.
+    hp: 4,
     atk: 3,
     canTarget: LAND,
     targetCategory: LAND,
@@ -274,9 +281,6 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
         key: "rzut_glazem",
         trigger: "on_attack",
         effectKey: "jointAttack",
-        // v3 ujednolica ten tag z Leśnym Szałem Enta (ten sam "combo_2_8dmg") — podział między
-        // kilka celów jest tu dozwolony tak samo jak u Enta (w oryginalnej instrukcji tekst przy
-        // Cyklopie nie wspominał o podziale wprost — ujednolicenie przyjęte z nowego silnika).
         params: { unitName: "Cyklop", requiredCount: 2, totalAtk: 8, splittable: true, canTarget: BOTH },
         description: "Jeżeli w obszarze gry masz 2 Cyklopy mogą wykonać wspólny atak o sile 8 ATK przeciw jednostkom lądowym lub powietrznym. Atak można podzielić pomiędzy kilka celów.",
       },
@@ -284,7 +288,8 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
   },
   Czarodziej: {
     name: "Czarodziej",
-    hp: 3,
+    // v4: HP 3→2.
+    hp: 2,
     atk: 3,
     canTarget: BOTH,
     targetCategory: BOTH,
@@ -297,20 +302,49 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
         params: { amount: 2 },
         description: "Po ustawieniu w obszarze gry pierwszy atak tej jednostki otrzymuje +2 ATK.",
       },
+      {
+        // v4: Czarodziej zyskuje Natchnienie (ta sama ciągła aura co Abzugud).
+        key: "natchnienie",
+        trigger: "passive_aura",
+        effectKey: "auraAtkAllOwnUnits",
+        params: { amount: 1 },
+        description: "Dopóki ta jednostka pozostaje w obszarze gry, wszystkie Twoje jednostki (wliczając ją) otrzymują +1 ATK.",
+      },
     ],
   },
   "Doświadczony Królewski Gwardzista": {
+    // v4: HP 3→1. Nieobecna w żadnej kompozycji talii królestwa (zastąpiona przez "Królewski
+    // Gwardzista Ninurty" w Uru-Gal) — zachowana w katalogu jako martwy, niekupowalny wpis.
     name: "Doświadczony Królewski Gwardzista",
-    hp: 3,
+    hp: 1,
     atk: 2,
     canTarget: LAND,
     targetCategory: LAND,
     infrastructureForbidden: false,
     abilities: [],
   },
+  "Królewski Gwardzista Ninurty": {
+    // NOWA jednostka (v4) — Uru-Gal, zastępuje "Doświadczony Królewski Gwardzista" w tej talii.
+    name: "Królewski Gwardzista Ninurty",
+    hp: 1,
+    atk: 1,
+    canTarget: LAND,
+    targetCategory: LAND,
+    infrastructureForbidden: false,
+    abilities: [
+      {
+        key: "inicjatywa",
+        trigger: "on_play",
+        effectKey: "buffSelfAtkNextAttack",
+        params: { amount: 2 },
+        description: "Po ustawieniu w obszarze gry pierwszy atak tej jednostki otrzymuje +2 ATK.",
+      },
+    ],
+  },
   "Elf Mroczny": {
     name: "Elf Mroczny",
-    hp: 4,
+    // v4: HP 4→3.
+    hp: 3,
     atk: 4,
     canTarget: BOTH,
     targetCategory: BOTH,
@@ -356,25 +390,35 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
       },
       {
         key: "wzmocnienie",
-        trigger: "on_play",
-        effectKey: "buffOwnUnitsHp",
+        trigger: "passive_aura",
+        effectKey: "wzmocnienieAura",
         params: { amount: 1 },
-        description: "Po wejściu do gry zwiększ HP jednostek AKTUALNIE w obszarze gry o +1 HP.",
+        description: "Dopóki ta jednostka pozostaje w obszarze gry, wszystkie INNE Twoje jednostki otrzymują +1 HP.",
       },
     ],
   },
   "Młody Smok": {
     name: "Młody Smok",
-    hp: 6,
-    atk: 5,
+    // v4: HP 6→5, ATK 5→4, ZYSKUJE Inicjatywę (poprzednio brak zdolności).
+    hp: 5,
+    atk: 4,
     canTarget: BOTH,
     targetCategory: BOTH,
     infrastructureForbidden: true,
-    abilities: [],
+    abilities: [
+      {
+        key: "inicjatywa",
+        trigger: "on_play",
+        effectKey: "buffSelfAtkNextAttack",
+        params: { amount: 2 },
+        description: "Po ustawieniu w obszarze gry pierwszy atak tej jednostki otrzymuje +2 ATK.",
+      },
+    ],
   },
-  "Legendarny Wyvern": {
-    name: "Legendarny Wyvern",
-    hp: 8,
+  Wyvern: {
+    // v4: przemianowany z "Legendarny Wyvern" na "Wyvern" (zgodnie z cards.py/PDF); HP 8→6.
+    name: "Wyvern",
+    hp: 6,
     atk: 3,
     canTarget: AIR,
     targetCategory: AIR,
@@ -391,8 +435,9 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
   },
   Nagual: {
     name: "Nagual",
+    // v4: ATK 3→1.
     hp: 2,
-    atk: 3,
+    atk: 1,
     canTarget: LAND,
     targetCategory: LAND,
     infrastructureForbidden: false,
@@ -400,14 +445,14 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
   },
   "Emisariusz En-šukud": {
     name: "Emisariusz En-šukud",
-    hp: 2,
-    atk: 1,
+    // v4: HP 2→1, ATK 1→0.
+    hp: 1,
+    atk: 0,
     canTarget: LAND,
     targetCategory: LAND,
     infrastructureForbidden: false,
     abilities: [
       {
-        // v3 dodaje Zręczność do tej jednostki (nieobecna w pierwotnej transkrypcji PDF).
         key: "zrecznosc",
         trigger: "on_turn_start",
         effectKey: "drawFromStartingDeck",
@@ -432,7 +477,8 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
   },
   Minotaur: {
     name: "Minotaur",
-    hp: 5,
+    // v4: HP 5→3.
+    hp: 3,
     atk: 4,
     canTarget: LAND,
     targetCategory: LAND,
@@ -448,7 +494,6 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
     ],
   },
   Krasnolud: {
-    // Staty zmienione w v3: HP 4→3, ATK 2→3.
     name: "Krasnolud",
     hp: 3,
     atk: 3,
@@ -457,9 +502,6 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
     infrastructureForbidden: false,
     abilities: [
       {
-        // v3: Katapulta to już nie wspólny atak dzielący slot, lecz TRWAŁE, opcjonalne
-        // połączenie dwóch Krasnoludów w jedną kartę Katapulty (4 HP, 6 ATK, lądowe+powietrzne).
-        // Aktywowane ręcznie, gdy gracz ma 2 Krasnoludy w obszarze gry.
         key: "krasnolud_katapulta",
         trigger: "activated",
         effectKey: "mergeIntoKatapulta",
@@ -476,8 +518,7 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
     ],
   },
   Katapulta: {
-    // NOWA jednostka (v3) — produkt połączenia 2 Krasnoludów, nigdy nie kupowana bezpośrednio
-    // (nie występuje w żadnej kompozycji talii królestwa).
+    // Produkt połączenia 2 Krasnoludów, nigdy nie kupowana bezpośrednio.
     name: "Katapulta",
     hp: 4,
     atk: 6,
@@ -502,27 +543,40 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
         description: "Na początku swojej tury napraw 1 obrażenie Królestwa.",
       },
       {
+        // v4: Mag jest jedynym nosicielem Wzmocnienia o wartości +2 HP (nie +1) — zob. PDF
+        // "Podsumowanie zdolności" ("Mag: +2 HP") oraz cards.py tag "buff_hp_2".
         key: "wzmocnienie",
-        trigger: "on_play",
-        effectKey: "buffOwnUnitsHp",
-        params: { amount: 1 },
-        description: "Po wejściu do gry zwiększ HP jednostek AKTUALNIE w obszarze gry o +1 HP.",
+        trigger: "passive_aura",
+        effectKey: "wzmocnienieAura",
+        params: { amount: 2 },
+        description: "Dopóki ta jednostka pozostaje w obszarze gry, wszystkie INNE Twoje jednostki otrzymują +2 HP.",
       },
     ],
   },
   "Włócznik Fianna": {
     name: "Włócznik Fianna",
-    hp: 2,
+    // v4: HP 2→1, ZYSKUJE Znawcę Ścieżek (poprzednio brak zdolności).
+    hp: 1,
     atk: 2,
     canTarget: LAND,
     targetCategory: LAND,
     infrastructureForbidden: false,
-    abilities: [],
+    abilities: [
+      {
+        key: "path_expert",
+        trigger: "passive_aura",
+        effectKey: "pathExpertPeekAndKeepBest",
+        params: {},
+        description:
+          "Dopóki masz tę jednostkę w obszarze gry: przy zakupie jednostki z talii królestwa spójrz na 2 wierzchnie karty i zachowaj lepszą (druga wraca pod spód talii); przy zakupie karty Wydarzenia spójrz na 2 wierzchnie karty i zachowaj tę o pozytywnej polaryzacji (druga wraca pod spód talii).",
+      },
+    ],
   },
   Centaur: {
     name: "Centaur",
-    hp: 4,
-    atk: 3,
+    // v4: HP 4→3, ATK 3→4.
+    hp: 3,
+    atk: 4,
     canTarget: LAND,
     targetCategory: LAND,
     infrastructureForbidden: true,
@@ -535,42 +589,47 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
         description: "Po pokonaniu wrogiej jednostki, karta może natychmiast wykonać drugi atak po czym musi zostać odrzucona na stos kart odrzuconych.",
       },
       {
+        // v4: Galop zastąpiony przez Powietrzny Transport Pegaza — Centaur teraz przenosi
+        // SOJUSZNICZĄ jednostkę (nie samego siebie), dokładnie jak Pegaz.
         key: "galop",
         trigger: "activated",
-        effectKey: "relocateSelf",
+        effectKey: "relocateAllyOncePerTurn",
         params: {},
-        description: "Po zakończeniu swojej tury możesz przenieść Centaura na dowolne wolne pole w swoim obszarze gry.",
+        description: "Raz na turę możesz przenieść jedną sojuszniczą jednostkę na dowolne wolne miejsce w swoim obszarze gry (w tym do infrastruktury).",
       },
     ],
   },
   "Elf Świetlisty": {
-    // ATK zmienione w v3: 3→2.
     name: "Elf Świetlisty",
-    hp: 4,
+    // v4: HP 4→3.
+    hp: 3,
     atk: 2,
     canTarget: BOTH,
     targetCategory: LAND,
     infrastructureForbidden: false,
     abilities: [
       {
+        // v4: Elf Świetlisty to JEDYNA jednostka, której Inicjatywa daje +3 ATK zamiast +2
+        // (potwierdzone w simulator_v3 (1) 2.py resolve_attack i w PDF "Podsumowanie zdolności").
         key: "inicjatywa",
         trigger: "on_play",
         effectKey: "buffSelfAtkNextAttack",
-        params: { amount: 2 },
-        description: "Po ustawieniu w obszarze gry pierwszy atak tej jednostki otrzymuje +2 ATK.",
+        params: { amount: 3 },
+        description: "Po ustawieniu w obszarze gry pierwszy atak tej jednostki otrzymuje +3 ATK.",
       },
       {
         key: "wzmocnienie",
-        trigger: "on_play",
-        effectKey: "buffOwnUnitsHp",
+        trigger: "passive_aura",
+        effectKey: "wzmocnienieAura",
         params: { amount: 1 },
-        description: "Po wejściu do gry zwiększ HP jednostek AKTUALNIE w obszarze gry o +1 HP.",
+        description: "Dopóki ta jednostka pozostaje w obszarze gry, wszystkie INNE Twoje jednostki otrzymują +1 HP.",
       },
     ],
   },
   Pegaz: {
     name: "Pegaz",
-    hp: 4,
+    // v4: HP 4→2.
+    hp: 2,
     atk: 1,
     canTarget: AIR,
     targetCategory: AIR,
@@ -592,17 +651,36 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
       },
     ],
   },
-  Łucznik: {
-    name: "Łucznik",
-    hp: 2,
+  "Doświadczony Łucznik": {
+    // v4: przemianowany z "Łucznik"; HP 2→1. Zyskuje zdolność łączenia w Kolczan Prawilności.
+    name: "Doświadczony Łucznik",
+    hp: 1,
     atk: 1,
+    canTarget: BOTH,
+    targetCategory: LAND,
+    infrastructureForbidden: false,
+    abilities: [
+      {
+        key: "lucznik_kolczan",
+        trigger: "activated",
+        effectKey: "mergeIntoKolczan",
+        params: {},
+        description: "Możesz połączyć dwóch Doświadczonych Łuczników w obszarze gry w jedną kartę Kolczana Prawilności (2 HP, 2 ATK, atak lądowy i powietrzny).",
+      },
+    ],
+  },
+  "Kolczan Prawilności": {
+    // NOWA jednostka (v4) — produkt połączenia 2 Doświadczonych Łuczników, nigdy nie kupowana
+    // bezpośrednio (nie występuje w żadnej kompozycji talii królestwa).
+    name: "Kolczan Prawilności",
+    hp: 2,
+    atk: 2,
     canTarget: BOTH,
     targetCategory: LAND,
     infrastructureForbidden: false,
     abilities: [],
   },
   Medjayet: {
-    // NOWA jednostka (v3) — Pr-Djed.
     name: "Medjayet",
     hp: 1,
     atk: 1,
@@ -620,21 +698,22 @@ export const UNIT_TEMPLATES: Record<string, UnitTemplate> = {
     ],
   },
   Amazonka: {
-    // NOWA jednostka (v3) — Uru-Gal.
     name: "Amazonka",
-    hp: 2,
-    atk: 3,
+    // v4: HP 2→1, ATK 3→1.
+    hp: 1,
+    atk: 1,
     canTarget: BOTH,
     targetCategory: LAND,
     infrastructureForbidden: false,
     abilities: [
       {
+        // v4: próg 2→1 Amazonek (potwierdzone w simulator_v3 (1) 2.py: `count("Amazonka") >= 1`).
         key: "siostrzana_przysiega",
         trigger: "on_turn_start",
         effectKey: "amazonSisterlyOath",
-        params: { requiredCount: 2 },
+        params: { requiredCount: 1 },
         description:
-          "Jeżeli masz 2 Amazonki w obszarze gry: na początku swojej tury spójrz na wierzchnie karty talii startowej, zagraj/dobierz najlepszą, resztę rozdziel między odrzucone i spód talii.",
+          "Gdy Amazonka jest w grze: na początku swojej tury spójrz na 3 wierzchnie karty talii startowej, jedną dobierz/zagraj od razu, jedną odrzuć na stos kart odrzuconych, jedną odłóż z powrotem na wierzch talii.",
       },
     ],
   },

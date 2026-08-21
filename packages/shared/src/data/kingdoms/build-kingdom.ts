@@ -13,6 +13,10 @@ export interface UnitComposition {
 function slug(name: string): string {
   return name
     .toLowerCase()
+    // "ł" nie ma dekompozycji NFD do "l" (to odrębny znak, nie litera+diakrytyk) — bez tej jawnej
+    // podmiany np. "Włócznik Fianna"/"Doświadczony Łucznik" traciłyby "ł" jako martwy myślnik
+    // zamiast "l" (odkryte przy dodawaniu "Doświadczony Łucznik" — zob. slug("Łucznik") === "ucznik").
+    .replace(/ł/g, "l")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "-")

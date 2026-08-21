@@ -44,6 +44,10 @@ export interface StatusFlags {
   chargeBonusAttackAvailable?: boolean;
   /** Ten egzemplarz to Katapulta powstała z połączenia 2 Krasnoludów — przy odrzuceniu wraca jako 2 karty Krasnoluda (zob. zones.ts moveToDiscard). */
   isKrasnoludMerge?: boolean;
+  /** Ten egzemplarz to Kolczan Prawilności powstały z połączenia 2 Doświadczonych Łuczników — przy odrzuceniu wraca jako 2 karty Łucznika (zob. zones.ts moveToDiscard). */
+  isLucznikMerge?: boolean;
+  /** Trening z Gráfeldr'em: jednorazowo użyczony Szał Bitewny — sprawdzane i konsumowane w combat.ts destroyUnit PRZED wyczyszczeniem status przez moveToDiscard. */
+  oneShotSzalBitewnyPending?: boolean;
 }
 
 export interface CardInstance {
@@ -102,6 +106,8 @@ export interface PlayerState {
   scheduledTurnEffects: ScheduledTurnEffect[];
   /** Miejsce sterowane przez prostego bota serwera zamiast żywego gracza (zob. apps/server/src/engine/bot.ts) */
   isBot: boolean;
+  /** Trening z Gráfeldr'em: jednorazowo użyczony Znawca Ścieżek — konsumowany przy najbliższym zakupie z talii królestwa/Wydarzeń (zob. reducer.ts). */
+  oneShotPathExpertPending?: boolean;
 }
 
 export type TurnPhase = "draw" | "main";

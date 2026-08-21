@@ -2,15 +2,14 @@ import type { UnitComposition } from "./build-kingdom.js";
 
 export const MICTLANCALLI_ID = "mictlancalli";
 
-// Mictlancalli (36 kart, v3 — zob. cards.py): 9+3+2+3+4+7+5+3 = 36.
-// "Wyvern" z cards.py odpowiada jednostce "Legendarny Wyvern" z listy postaci.
+// Mictlancalli (34 kart, v4 — zob. cards (1) 2.py / PDF "34 kart w talii"): 5+4+3+6+2+4+6+4 = 34.
 export const MICTLANCALLI_COMPOSITION: UnitComposition[] = [
-  { unitName: "Elf Mroczny", count: 9 },
-  { unitName: "Feniks", count: 3 },
-  { unitName: "Legendarny Wyvern", count: 2 },
-  { unitName: "Młody Smok", count: 3 },
+  { unitName: "Elf Mroczny", count: 5 },
   { unitName: "Czarodziej", count: 4 },
-  { unitName: "Nagual", count: 7 },
-  { unitName: "Emisariusz En-šukud", count: 5 },
-  { unitName: "Łucznik", count: 3 },
+  { unitName: "Wyvern", count: 3 },
+  { unitName: "Emisariusz En-šukud", count: 6 },
+  { unitName: "Młody Smok", count: 2 },
+  { unitName: "Doświadczony Łucznik", count: 4 },
+  { unitName: "Nagual", count: 6 },
+  { unitName: "Feniks", count: 4 },
 ];

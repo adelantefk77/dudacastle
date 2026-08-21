@@ -1,23 +1,21 @@
 import type { EventCardDefinition, UnitCardDefinition } from "../types/card.js";
 
 /**
- * Talia Wydarzeń (wspólna) — v3 (zob. cards.py/simulator_v3.py dostarczone przez użytkownika).
- * Zmiany względem pierwotnej transkrypcji PDF:
- *  - Koszt KAŻDEJ karty Wydarzenia jest jednolity (EVENT_COST=3) — pierwotna transkrypcja PDF
- *    zakładała zróżnicowany koszt per-karta z sekcji 9; v3 ujednolica go zgodnie z ogólną
- *    zasadą z sekcji 1 ("każda karta wydarzeń kosztuje 3 monety").
- *  - `deckCount` per karta jest teraz jawnie podany (suma 61, zob. cards.py) zamiast placeholdera.
- *  - Kilka efektów ma skorygowane wartości liczbowe (patrz komentarze przy każdej karcie).
- *  - "Munmaa" nie jest już jednostką umieszczoną bezpośrednio w talii Wydarzeń — to karta
- *    Wydarzenia, której natychmiastowy efekt dodaje jednostkę Munmaa do ręki (zob. Munmaa poniżej).
+ * Talia Wydarzeń (wspólna) — v4 (zob. `cards (1) 2.py` / `simulator_v3 (1) 2.py` / The-Five-Crowns-
+ * Kompendium-Gracza.pdf dostarczone przez użytkownika). Zmiany względem poprzedniej wersji tego
+ * pliku udokumentowane przy każdej karcie.
+ *  - Koszt KAŻDEJ karty Wydarzenia jest jednolity (EVENT_COST=3).
+ *  - "Munmaa" nie jest jednostką umieszczoną bezpośrednio w talii Wydarzeń — to karta Wydarzenia,
+ *    której natychmiastowy efekt dodaje jednostkę Munmaa do ręki (zob. Munmaa poniżej).
  */
 const EVENT_COST = 3;
 
 export const EVENT_CARD_DEFINITIONS: EventCardDefinition[] = [
   {
-    id: "event-platnerz",
+    id: "event-cearta",
     type: "event",
-    name: "Płatnerz",
+    // v4: przemianowana z "Płatnerz" na "Cearta" (efekt bez zmian).
+    name: "Cearta",
     cost: EVENT_COST,
     timing: "permanent",
     effectKey: "permanentAuraHpAllOwnUnits",
@@ -27,27 +25,33 @@ export const EVENT_CARD_DEFINITIONS: EventCardDefinition[] = [
     polarity: "positive",
   },
   {
-    id: "event-trening-z-wojownikiem-srebrnych-glow",
+    id: "event-trening-z-grafeldrem",
     type: "event",
-    name: "Trening z Wojownikiem Srebrnych Głów",
+    // v4: przemianowana z "Trening z Wojownikiem Srebrnych Głów"; deckCount 3→7; wybór zdolności
+    // zmieniony z [Uzdrowienie/Zręczność/Inicjatywa/Szarża] na [Szał Bitewny/Zręczność/Znawca
+    // Ścieżek/Szarża] (zob. PDF sekcja 8 i effect-resolver.ts grantOneShotAbilityToUnit).
+    name: "Trening z Gráfeldr'em",
     cost: EVENT_COST,
     timing: "held_one_shot",
     effectKey: "grantOneShotAbilityToUnit",
-    params: { choices: ["uzdrowienie", "zrecznosc", "inicjatywa", "szarza"] },
+    params: { choices: ["szal_bitewny", "zrecznosc", "znawca_sciezek", "szarza"] },
     description:
-      "W najbliższej swojej turze wybierz jedną jednostkę w swoim obszarze gry. Może jednorazowo wykorzystać jedną z umiejętności: Uzdrowienie, Zręczność, Inicjatywa lub Szarża.",
-    deckCount: 3,
+      "W najbliższej swojej turze wybierz jedną jednostkę w swoim obszarze gry. Może jednorazowo wykorzystać jedną z umiejętności: Szał Bitewny, Zręczność, Znawca Ścieżek lub Szarża.",
+    deckCount: 7,
     polarity: "positive",
   },
   {
-    id: "event-wizyta-generala-szarych-plaszczy",
+    id: "event-wizyta-bohatera-srebrnych-glow",
     type: "event",
-    name: "Wizyta Generała Szarych Płaszczy",
+    // v4: przemianowana z "Wizyta Generała Szarych Płaszczy"; deckCount 4→2; timing "instant"→
+    // "held_one_shot" (trzymana na ręce, zagrywana jednorazowo w wybranej turze — zob. PDF sekcja 8:
+    // "trzymane | Gdy zagrywasz tę kartę: ATK wszystkich Twoich jednostek zostaje podwojony w tej turze").
+    name: "Wizyta Bohatera Srebrnych Głów",
     cost: EVENT_COST,
-    timing: "instant",
+    timing: "held_one_shot",
     effectKey: "doubleAtkAllOwnUnitsThisTurn",
-    description: "Do końca tej tury wartość ATK wszystkich Twoich jednostek w obszarze gry zostaje podwojona.",
-    deckCount: 4,
+    description: "Zachowaj tę kartę na ręce. Gdy ją zagrasz, do końca tej tury wartość ATK wszystkich Twoich jednostek w obszarze gry zostaje podwojona.",
+    deckCount: 2,
     polarity: "positive",
   },
   {
@@ -111,7 +115,8 @@ export const EVENT_CARD_DEFINITIONS: EventCardDefinition[] = [
     params: { amount: 2 },
     description:
       "Każdy z pozostałych graczy musi natychmiast zapłacić Ci 2 monety. Gracz, który nie może tego zrobić, pomija swoją następną turę.",
-    deckCount: 3,
+    // v4: deckCount 3→6.
+    deckCount: 6,
     polarity: "positive",
   },
   {
@@ -135,13 +140,15 @@ export const EVENT_CARD_DEFINITIONS: EventCardDefinition[] = [
     timing: "instant",
     effectKey: "skipNextPlayerTurn",
     description: "Następny gracz po Twojej lewej pomija swoją następną turę.",
-    deckCount: 3,
+    // v4: deckCount 3→5.
+    deckCount: 5,
     polarity: "positive",
   },
   {
-    id: "event-mgla",
+    id: "event-mixtli",
     type: "event",
-    name: "Mgła",
+    // v4: przemianowana z "Mgła" na "Mixtli" (efekt bez zmian).
+    name: "Mixtli",
     cost: EVENT_COST,
     timing: "held_one_shot",
     effectKey: "untargetableSelfThisTurn",
@@ -197,10 +204,11 @@ export const EVENT_CARD_DEFINITIONS: EventCardDefinition[] = [
     cost: EVENT_COST,
     timing: "instant",
     effectKey: "skipTurnThenFreeUnitDraw",
+    // v4: pominięta tura jest też NIETYKALNA (zob. effect-resolver.ts skipTurnThenFreeUnitDraw).
     description:
-      "Pomiń swoją następną turę. Na początku kolejnej dobierz wierzchnią kartę ze swojej Talii Królestwa i dodaj ją na rękę, nie ponosząc kosztu jej zakupu.",
+      "Pomiń swoją następną turę (podczas niej jesteś nietykalny). Na początku kolejnej dobierz wierzchnią kartę ze swojej Talii Królestwa i dodaj ją na rękę, nie ponosząc kosztu jej zakupu.",
     deckCount: 5,
-    polarity: "mixed",
+    polarity: "negative",
   },
   {
     id: "event-zarazliwa-plaga",
@@ -212,7 +220,8 @@ export const EVENT_CARD_DEFINITIONS: EventCardDefinition[] = [
     params: { amount: 2 },
     description:
       "Odrzuć 2 jednostki ze swojego obszaru gry. Jeżeli nie posiadasz żadnej jednostki, efekt tej karty przechodzi na następnego gracza zgodnie z kolejnością tur.",
-    deckCount: 3,
+    // v4: deckCount 3→5.
+    deckCount: 5,
     polarity: "negative",
   },
   {
@@ -272,9 +281,14 @@ export const EVENT_CARD_DEFINITIONS: EventCardDefinition[] = [
     cost: EVENT_COST,
     timing: "held_one_shot",
     effectKey: "relocateOwnUnitThenDiscard",
+    // v4: zawsze konsumowana po jednej próbie i wraca pod SPÓD Talii Wydarzeń (nie na odrzucone) —
+    // zob. simulator_v3 (1) 2.py: `active.event_deck_ref.insert(0, ev)`, oraz identyczny mechanizm
+    // `returnToBottomOfEventDeck` już użyty przez Zasadzkę Banitów (reducer.ts PLAY_EVENT_FROM_HAND).
+    params: { returnToBottomOfEventDeck: true },
     description:
-      "Zachowaj tę kartę na ręce. W dowolnej swojej turze możesz przemieścić jedną jednostkę na dowolne wolne miejsce w swoim obszarze gry. Następnie odrzuć tę kartę.",
-    deckCount: 8,
+      "Zachowaj tę kartę na ręce. W dowolnej swojej turze możesz przemieścić jedną jednostkę na dowolne wolne miejsce w swoim obszarze gry. Karta wraca pod spód Talii Wydarzeń.",
+    // v4: deckCount 8→5.
+    deckCount: 5,
     polarity: "positive",
   },
   {
@@ -310,7 +324,8 @@ export const EVENT_DECK_UNIT_DEFINITIONS: UnitCardDefinition[] = [
     hp: 3,
     atk: 2,
     canTarget: "land_and_air",
-    targetCategory: "land_and_air",
+    // v4: TARGET_CATEGORY w cards.py mówi "land" (Munmaa sama jako cel jest wyłącznie lądowa).
+    targetCategory: "land",
     infrastructureForbidden: false,
     abilities: [
       {
@@ -319,6 +334,26 @@ export const EVENT_DECK_UNIT_DEFINITIONS: UnitCardDefinition[] = [
         effectKey: "buffSelfAtkNextAttack",
         params: { amount: 2 },
         description: "Po ustawieniu w obszarze gry pierwszy atak tej jednostki otrzymuje +2 ATK.",
+      },
+      {
+        // NOWA zdolność (v4) — Munmaa zyskuje Wzmocnienie (ta sama żywa, ciągła aura HP co
+        // Faun/Druid/Feniks/Mag/Elf Świetlisty, zob. cards.py "buff_hp_1").
+        key: "wzmocnienie",
+        trigger: "passive_aura",
+        effectKey: "wzmocnienieAura",
+        params: { amount: 1 },
+        description: "Dopóki ta jednostka pozostaje w obszarze gry, wszystkie INNE Twoje jednostki otrzymują +1 HP.",
+      },
+      {
+        // NOWA zdolność (v4) — Przywołanie: gdy Munmaa zostanie odrzucona (z jakiegokolwiek
+        // powodu), odzyskaj jedną losową kartę ze stosu odrzuconych do ręki, następnie odrzuć
+        // najsłabszą kartę z ręki (zob. simulator_v3 (1) 2.py try_munmaa_summon).
+        key: "munmaa_summon",
+        trigger: "on_death",
+        effectKey: "recycleRandomFromDiscardOnOwnDeath",
+        params: {},
+        description:
+          "Po odrzuceniu tej jednostki odzyskaj jedną losową kartę ze stosu odrzuconych do ręki, następnie odrzuć najsłabszą kartę z ręki.",
       },
       {
         // Nieobecne w cards.py (silnik symulacyjny nie modeluje pozycji na planszy — zob.
